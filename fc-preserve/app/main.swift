@@ -1,12 +1,14 @@
 import Cocoa
 import Foundation
 import UniformTypeIdentifiers
+import WebKit
+import AVKit
+import AVFoundation
 
 let kPreservePy = "/Volumes/qbitOS/00.dev/grokbotsGH/fc-preserve/preserve.py"
 let kDefaultVault = "/Volumes/MacBookPro - Data/FC-Preserve"
 let kImagesDir = "/Volumes/MacBookPro - Data/FC-Preserve/images"
 let kImageCatalog = kImagesDir + "/catalog.json"
-let kEtcherApp = "/Applications/balenaEtcher.app"
 let kLMStudioApp = "/Applications/LM Studio.app"
 let kIdevice = "/opt/homebrew/bin/idevice_id"
 let kBabyUDID = "4ea7e05b3045f0e9036275125a85225dd6dd9bb9"
@@ -432,10 +434,133 @@ final class FinderWell: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        if event.clickCount >= 2 {
-            let target = filePath.isEmpty ? folderPath : filePath
-            onOpen?(target)
+        let target = filePath.isEmpty ? folderPath : filePath
+        onOpen?(target)
+    }
+}
+
+final class InAppPreview: NSView {
+    let titleLab: NSTextField
+    let imageView = NSImageView()
+    let playerHost = AVPlayerView()
+    let scroll = NSScrollView()
+    let textView = NSTextView()
+    var player: AVPlayer?
+
+    override init(frame frameRect: NSRect) {
+        titleLab = lab("in-app preview · click a thumb — does not open Finder", size: 10, weight: .regular, color: Theme.mute, wrap: true)
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.backgroundColor = Theme.inset.cgColor
+        layer?.cornerRadius = 8
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+        playerHost.translatesAutoresizingMaskIntoConstraints = false
+        playerHost.controlsStyle = .inline
+        playerHost.isHidden = true
+        imageView.isHidden = true
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = false
+        textView.isEditable = false
+        textView.isRichText = false
+        textView.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        textView.backgroundColor = Theme.inset
+        textView.textColor = Theme.dim
+        textView.autoresizingMask = [.width, .height]
+        scroll.documentView = textView
+        addSubview(titleLab)
+        addSubview(imageView)
+        addSubview(playerHost)
+        addSubview(scroll)
+        NSLayoutConstraint.activate([
+            titleLab.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            titleLab.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            titleLab.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            imageView.topAnchor.constraint(equalTo: titleLab.bottomAnchor, constant: 2),
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            playerHost.topAnchor.constraint(equalTo: titleLab.bottomAnchor, constant: 2),
+            playerHost.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            playerHost.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            playerHost.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            scroll.topAnchor.constraint(equalTo: titleLab.bottomAnchor, constant: 2),
+            scroll.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            scroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            scroll.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:)") }
+
+    func show(path: String) {
+        player?.pause()
+        player = nil
+        playerHost.player = nil
+        imageView.image = nil
+        imageView.isHidden = true
+        playerHost.isHidden = true
+        scroll.isHidden = true
+        if path.isEmpty {
+            titleLab.stringValue = "in-app preview · nothing selected"
+            textView.string = "click a well"
+            scroll.isHidden = false
+            return
         }
+        var isDir: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDir)
+        let name = (path as NSString).lastPathComponent
+        if !exists {
+            titleLab.stringValue = "missing · " + name
+            textView.string = path + "\nnot on disk. empty well is honest."
+            scroll.isHidden = false
+            return
+        }
+        if isDir.boolValue {
+            titleLab.stringValue = "folder · " + name
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+            var body = path + "\n" + "\(names.count) item(s)\n"
+            for n in names.sorted().prefix(40) { body += n + "\n" }
+            if names.count > 40 { body += "…\n" }
+            textView.string = body
+            scroll.isHidden = false
+            return
+        }
+        let ext = (path as NSString).pathExtension.lowercased()
+        let imgs = Set(["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "tif", "tiff", "bmp"])
+        let vids = Set(["mov", "mp4", "m4v", "avi"])
+        if imgs.contains(ext), let img = NSImage(contentsOfFile: path) {
+            titleLab.stringValue = "image · " + name
+            imageView.image = img
+            imageView.isHidden = false
+            return
+        }
+        if vids.contains(ext) {
+            titleLab.stringValue = "video · " + name
+            let p = AVPlayer(url: URL(fileURLWithPath: path))
+            player = p
+            playerHost.player = p
+            playerHost.isHidden = false
+            return
+        }
+        titleLab.stringValue = "file · " + name
+        let sz = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value ?? 0
+        var body = path + "\n" + fmtBytes(sz) + "\n"
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: [.mappedIfSafe]), data.count > 0 {
+            let slice = data.prefix(2048)
+            if let s = String(data: slice, encoding: .utf8), s.unicodeScalars.allSatisfy({ !$0.properties.isJoinControl }) {
+                body += s
+                if data.count > 2048 { body += "\n…" }
+            } else {
+                body += "binary · preview stays here, not Finder"
+            }
+        }
+        textView.string = body
+        scroll.isHidden = false
     }
 }
 
@@ -456,7 +581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { return true }
 }
 
-final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
+final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var step: WizardStep = .device
     var alias = "GrokBotBaby"
@@ -498,14 +623,16 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var hfCacheBytes: Int64 = 0
     var hfCliPath = ""
     var lmsPath = ""
-    var etcherPresent = false
+    var hfPinned: Set<String> = []
+    var hfHidden: Set<String> = []
+    var isoWriting = false
     var isoList: NSTextView!
     var isoTargetList: NSTextView!
     var isoStatus: NSTextField!
     var isoImageField: NSTextField!
     var isoTargetField: NSTextField!
-    var etcherBtn: NSButton!
     var isoFlashBtn: NSButton!
+    var isoRescanBtn: NSButton!
     var osCreate: NSTextField!
     var osCustomize: NSTextField!
     var osDeploy: NSTextField!
@@ -528,6 +655,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var finderTabs: NSSegmentedControl!
     var finderWells: [FinderWell] = []
     var finderActiveID: String = "baby"
+    var thumbPreview: InAppPreview!
     var hotpipeStatus: NSTextField!
     var hotpipeMux: NSTextField!
     var hotpipePorts: NSTextField!
@@ -550,6 +678,9 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var openMotionBtn: NSButton!
     var copyMotionBtn: NSButton!
     var openBlochBtn: NSButton!
+    var motionWeb: WKWebView!
+    var probeBtn: NSButton!
+    var doctorBtn: NSButton!
 
     var lastDrives: [DriveRow] = []
     var lastMux: [String] = []
@@ -637,7 +768,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         root.addSubview(primaryBtn)
         root.addSubview(flashBtn)
 
-        footNote = lab("Never flashes. linux / Etcher stay off until gate.ready. Desk is live inventory + tether.", size: 11, weight: .regular, color: Theme.mute)
+        footNote = lab("Never flashes. linux stays off until gate.ready. Desk is live inventory + in-app tether. No other apps launched.", size: 11, weight: .regular, color: Theme.mute)
         footNote.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(footNote)
 
@@ -896,7 +1027,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         for i in 0..<6 {
             let well = FinderWell()
             well.onOpen = { [weak self] path in
-                self?.openInFinder(path)
+                self?.previewInApp(path)
             }
             finderWells.append(well)
             rowViews.append(well)
@@ -911,7 +1042,10 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             }
         }
 
-        thumbNote = lab("Finder icon-view · named slots · 0 items when empty · double-click opens Finder.", size: 10.5, weight: .regular, color: Theme.warn, wrap: true)
+        thumbPreview = InAppPreview()
+        doc.addSubview(thumbPreview)
+
+        thumbNote = lab("in-app icon-view · named slots · 0 items when empty · click previews here, not Finder.", size: 10.5, weight: .regular, color: Theme.warn, wrap: true)
         doc.addSubview(thumbNote)
 
         var cam: NSTextField!
@@ -971,7 +1105,11 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             grid.topAnchor.constraint(equalTo: finderTabs.bottomAnchor, constant: 8),
             grid.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
             grid.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
-            thumbNote.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 6),
+            thumbPreview.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 6),
+            thumbPreview.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            thumbPreview.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
+            thumbPreview.heightAnchor.constraint(equalToConstant: 156),
+            thumbNote.topAnchor.constraint(equalTo: thumbPreview.bottomAnchor, constant: 6),
             thumbNote.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
             thumbNote.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
             partsA.topAnchor.constraint(equalTo: thumbNote.bottomAnchor, constant: 10),
@@ -1228,7 +1366,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
         let hISO = sectionTitle("ISO / USB TOOLS", symbol: "opticaldisc")
         doc.addSubview(hISO)
-        let isoHow = lab("Etcher-shaped, local routes only. SELECT IMAGE → SELECT TARGET → FLASH + verify. Never the iPhone, never Internal APFS, never the Data vault, never qbitOS. Phone linux-gate still locks phone flash.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        let isoHow = lab("In-app flasher only. SELECT IMAGE → SELECT TARGET → FLASH + verify in the desk log. hdiutil / diskutil / dd stay inside this window. Never the iPhone, never Internal APFS, never the Data vault, never qbitOS. Phone linux-gate still locks phone flash.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
         isoHow.translatesAutoresizingMaskIntoConstraints = false
         doc.addSubview(isoHow)
         isoImageField = NSTextField(string: "")
@@ -1267,12 +1405,12 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         doc.addSubview(tgtScroll)
         isoStatus = lab("FLASH locked — no removable USB picked.", size: 11, weight: .medium, color: Theme.warn, wrap: true)
         doc.addSubview(isoStatus)
-        etcherBtn = button("Open balenaEtcher", filled: false, action: #selector(openEtcher))
-        etcherBtn.translatesAutoresizingMaskIntoConstraints = false
-        isoFlashBtn = button("FLASH + verify (local)", filled: true, action: #selector(flashISO))
+        isoFlashBtn = button("FLASH + verify (in-app)", filled: true, action: #selector(flashISO))
         isoFlashBtn.translatesAutoresizingMaskIntoConstraints = false
         isoFlashBtn.isEnabled = false
-        let isoBtns = NSStackView(views: [etcherBtn, isoFlashBtn])
+        isoRescanBtn = button("Rescan targets", filled: false, action: #selector(rescanISOTargets))
+        isoRescanBtn.translatesAutoresizingMaskIntoConstraints = false
+        let isoBtns = NSStackView(views: [isoFlashBtn, isoRescanBtn])
         isoBtns.orientation = .horizontal
         isoBtns.spacing = 8
         isoBtns.translatesAutoresizingMaskIntoConstraints = false
@@ -1313,11 +1451,15 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         doc.addSubview(hfScroll)
         let hfCopy = button("Copy selected path", filled: false, action: #selector(copyHFPath))
         hfCopy.translatesAutoresizingMaskIntoConstraints = false
-        let hfOpen = button("Open LM Studio", filled: false, action: #selector(openLMStudio))
-        hfOpen.translatesAutoresizingMaskIntoConstraints = false
-        let hfDir = button("Open HF cache", filled: false, action: #selector(openHFCache))
-        hfDir.translatesAutoresizingMaskIntoConstraints = false
-        let hfBtns = NSStackView(views: [hfCopy, hfOpen, hfDir])
+        let hfPin = button("Pin", filled: false, action: #selector(pinHFModel))
+        hfPin.translatesAutoresizingMaskIntoConstraints = false
+        let hfDel = button("Remove from list", filled: false, action: #selector(hideHFModel))
+        hfDel.translatesAutoresizingMaskIntoConstraints = false
+        let hfScan = button("Scan cache", filled: false, action: #selector(scanHFCache))
+        hfScan.translatesAutoresizingMaskIntoConstraints = false
+        let hfCli = button("hf scan (stdout)", filled: false, action: #selector(runHFCliScan))
+        hfCli.translatesAutoresizingMaskIntoConstraints = false
+        let hfBtns = NSStackView(views: [hfCopy, hfPin, hfDel, hfScan, hfCli])
         hfBtns.orientation = .horizontal
         hfBtns.spacing = 8
         hfBtns.translatesAutoresizingMaskIntoConstraints = false
@@ -1328,8 +1470,17 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         andSlotNote = lab("Reserved lane. Tad ended with and — next tool sits here. Empty on purpose.", size: 11, weight: .regular, color: Theme.mute, wrap: true)
         doc.addSubview(andSlotNote)
 
-        let h4 = sectionTitle("FILE + TERMINAL ROUTES", symbol: "terminal")
+        let h4 = sectionTitle("FILE + TOOL ROUTES", symbol: "folder")
         doc.addSubview(h4)
+        probeBtn = button("Probe (log)", filled: false, action: #selector(deskProbe))
+        doctorBtn = button("Doctor (log)", filled: false, action: #selector(deskDoctor))
+        probeBtn.translatesAutoresizingMaskIntoConstraints = false
+        doctorBtn.translatesAutoresizingMaskIntoConstraints = false
+        let routeActs = NSStackView(views: [probeBtn, doctorBtn])
+        routeActs.orientation = .horizontal
+        routeActs.spacing = 8
+        routeActs.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(routeActs)
         routesStack = NSStackView()
         routesStack.orientation = .vertical
         routesStack.alignment = .leading
@@ -1344,9 +1495,9 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         motionRoute = mono("https://live.ugrad.ai/motion   ·   Bloch http://127.0.0.1:8793   ·   capture → vault/<alias>/<stamp>/motion/", size: 10.5, color: Theme.dim, wrap: true)
         doc.addSubview(motionRoute)
 
-        openMotionBtn = button("Open live motion", filled: false, action: #selector(openMotion))
+        openMotionBtn = button("Load motion here", filled: false, action: #selector(openMotion))
         copyMotionBtn = button("Copy URL", filled: false, action: #selector(copyMotion))
-        openBlochBtn = button("Bloch viewer", filled: false, action: #selector(openBloch))
+        openBlochBtn = button("Load Bloch here", filled: false, action: #selector(openBloch))
         captureBtn = button("Capture frame", filled: true, action: #selector(captureMotion))
         openMotionBtn.translatesAutoresizingMaskIntoConstraints = false
         copyMotionBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -1361,6 +1512,15 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         doc.addSubview(btnRow)
         captureNote = lab("not capturing yet — no live.jpg / AFC mount / Continuity pipe. idevicescreenshot waits for mux.", size: 11, weight: .regular, color: Theme.warn, wrap: true)
         doc.addSubview(captureNote)
+        let cfg = WKWebViewConfiguration()
+        cfg.websiteDataStore = WKWebsiteDataStore.nonPersistent()
+        motionWeb = WKWebView(frame: .zero, configuration: cfg)
+        motionWeb.navigationDelegate = self
+        motionWeb.translatesAutoresizingMaskIntoConstraints = false
+        motionWeb.wantsLayer = true
+        motionWeb.layer?.backgroundColor = Theme.inset.cgColor
+        motionWeb.layer?.cornerRadius = 6
+        doc.addSubview(motionWeb)
 
         let pad: CGFloat = 16
         NSLayoutConstraint.activate([
@@ -1461,6 +1621,8 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             andSlotNote.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
             h4.topAnchor.constraint(equalTo: andSlotNote.bottomAnchor, constant: 14),
             h4.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            routeActs.centerYAnchor.constraint(equalTo: h4.centerYAnchor),
+            routeActs.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
             routesStack.topAnchor.constraint(equalTo: h4.bottomAnchor, constant: 6),
             routesStack.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
             routesStack.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
@@ -1477,7 +1639,11 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             captureNote.topAnchor.constraint(equalTo: btnRow.bottomAnchor, constant: 6),
             captureNote.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
             captureNote.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            captureNote.bottomAnchor.constraint(equalTo: doc.bottomAnchor, constant: -18),
+            motionWeb.topAnchor.constraint(equalTo: captureNote.bottomAnchor, constant: 6),
+            motionWeb.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            motionWeb.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            motionWeb.heightAnchor.constraint(equalToConstant: 220),
+            motionWeb.bottomAnchor.constraint(equalTo: doc.bottomAnchor, constant: -18),
         ])
         return wrap
     }
@@ -1739,18 +1905,18 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
                 well.applyEmpty(name: name, kind: kind, folder: folder)
             }
             well.onOpen = { [weak self] path in
-                self?.openInFinder(path)
+                self?.previewInApp(path)
             }
         }
         if found.isEmpty {
             var line = "Finder · \(active?.caption ?? id) · 0 items"
             if lastMuxEmpty { line += " · mux empty" }
             if lastHotspot { line += " · hotspot has the cable" }
-            line += " — empty wells are honest, not fake photos. Double-click opens Finder."
+            line += " — empty wells are honest, not fake photos. Click previews in-app."
             thumbNote.stringValue = line
             thumbNote.textColor = Theme.warn
         } else {
-            thumbNote.stringValue = "\(found.count) file(s) on disk for \(active?.caption ?? id) (vault extract / AFC / live.jpg). Double-click opens Finder."
+            thumbNote.stringValue = "\(found.count) file(s) on disk for \(active?.caption ?? id) (vault extract / AFC / live.jpg). Click previews in-app, not Finder."
             thumbNote.textColor = Theme.ok
         }
     }
@@ -1815,26 +1981,12 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         }
     }
 
-    func openInFinder(_ path: String) {
+    func previewInApp(_ path: String) {
+        if thumbPreview == nil { return }
+        thumbPreview.show(path: path)
         if path.isEmpty { return }
-        let url = URL(fileURLWithPath: path)
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: path, isDirectory: &isDir) {
-            if isDir.boolValue {
-                NSWorkspace.shared.open(url)
-            } else {
-                NSWorkspace.shared.activateFileViewerSelecting([url])
-            }
-            return
-        }
-        let parent = (path as NSString).deletingLastPathComponent
-        if FileManager.default.fileExists(atPath: parent) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: parent))
-            return
-        }
-        if FileManager.default.fileExists(atPath: kDefaultVault) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: kDefaultVault))
-        }
+        let name = (path as NSString).lastPathComponent
+        appendLog("preview in-app: " + name + "\n")
     }
 
     func findMediaThumbs(for id: String? = nil) -> [(String, String)] {
@@ -2032,34 +2184,90 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         }
     }
 
-    @objc func openEtcher() {
-        if FileManager.default.fileExists(atPath: kEtcherApp) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: kEtcherApp))
-        } else if isoStatus != nil {
-            isoStatus.stringValue = "balenaEtcher.app not in /Applications — route only, not installed."
-            isoStatus.textColor = Theme.warn
-        }
-    }
-
-    @objc func openLMStudio() {
-        if FileManager.default.fileExists(atPath: kLMStudioApp) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: kLMStudioApp))
-        }
-    }
-
-    @objc func openHFCache() {
-        let p = NSHomeDirectory() + "/.cache/huggingface"
-        if FileManager.default.fileExists(atPath: p) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: p))
-        }
-    }
-
     @objc func copyHFPath() {
-        if let first = cachedModels.first {
+        if let sel = selectedModel() {
+            copyString(sel.2)
+            if hfStatus != nil { hfStatus.stringValue = "copied " + sel.2 }
+            return
+        }
+        if let first = cachedModels.first(where: { !hfHidden.contains($0.2) }) {
             copyString(first.2)
             if hfStatus != nil { hfStatus.stringValue = "copied " + first.2 }
         } else {
             copyString(NSHomeDirectory() + "/.cache/huggingface/hub")
+        }
+    }
+
+    func selectedModel() -> (String, Int64, String)? {
+        guard hfList != nil else { return cachedModels.first(where: { !hfHidden.contains($0.2) }) }
+        let ns = hfList.string as NSString
+        let sel = hfList.selectedRange()
+        var loc = sel.location
+        if loc == NSNotFound || loc >= ns.length { loc = 0 }
+        let lineRange = ns.lineRange(for: NSRange(location: min(loc, max(0, ns.length - 1)), length: 0))
+        let line = ns.substring(with: lineRange)
+        let parts = line.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        if let path = parts.last, path.hasPrefix("/") {
+            if let hit = cachedModels.first(where: { $0.2 == path }) { return hit }
+            return (parts.first ?? path, 0, path)
+        }
+        return cachedModels.first(where: { !hfHidden.contains($0.2) })
+    }
+
+    @objc func pinHFModel() {
+        guard let sel = selectedModel() else {
+            if hfStatus != nil { hfStatus.stringValue = "no model selected to pin" }
+            return
+        }
+        hfPinned.insert(sel.2)
+        hfHidden.remove(sel.2)
+        applyHFList()
+        saveSeat()
+        if hfStatus != nil { hfStatus.stringValue = "pinned " + sel.0 + " (list only)" }
+    }
+
+    @objc func hideHFModel() {
+        guard let sel = selectedModel() else {
+            if hfStatus != nil { hfStatus.stringValue = "no model selected to remove from list" }
+            return
+        }
+        hfHidden.insert(sel.2)
+        hfPinned.remove(sel.2)
+        applyHFList()
+        saveSeat()
+        if hfStatus != nil { hfStatus.stringValue = "removed from list (files left on disk): " + sel.0 }
+    }
+
+    @objc func scanHFCache() {
+        if hfStatus != nil { hfStatus.stringValue = "scanning local HF + LM Studio cache in-app…" }
+        refreshHFModels()
+    }
+
+    @objc func runHFCliScan() {
+        if hfCliPath.isEmpty {
+            if hfStatus != nil {
+                hfStatus.stringValue = "hf / huggingface-cli not on PATH — local cache scan only. Will not download. Will not launch LM Studio."
+            }
+            refreshHFModels()
+            return
+        }
+        if hfStatus != nil { hfStatus.stringValue = "running " + hfCliPath + " scan — stdout stays in MODELS" }
+        let args: [String]
+        if (hfCliPath as NSString).lastPathComponent == "hf" {
+            args = ["cache", "scan"]
+        } else {
+            args = ["scan-cache"]
+        }
+        streamExec(hfCliPath, args, label: "hf-scan") { [weak self] chunk in
+            guard let self = self, self.hfList != nil else { return }
+            let end = NSRange(location: self.hfList.string.utf16.count, length: 0)
+            self.hfList.replaceCharacters(in: end, with: chunk)
+        } done: { [weak self] code in
+            guard let self = self else { return }
+            if self.hfStatus != nil {
+                self.hfStatus.stringValue = "hf scan exit " + String(code) + " · stdout above · will not download · will not launch LM Studio"
+            }
+            self.refreshHFModels()
         }
     }
 
@@ -2079,18 +2287,18 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         }
         let alert = NSAlert()
         alert.messageText = "Write image to dest?"
-        alert.informativeText = "IMAGE: \(img)\nDEST: \(isoTargetNode)\n\nLocal ISO/USB only. Will not flash GrokBotBaby or Brick. Will not touch Internal / vault / qbitOS.\ndd is last resort and needs this confirm. Prefer Etcher for USB sticks."
+        alert.informativeText = "IMAGE: \(img)\nDEST: \(isoTargetNode)\n\nIn-app ISO/USB only. Will not flash GrokBotBaby or Brick. Will not touch Internal / vault / qbitOS.\nProgress + verify stream in the desk log. No Etcher."
         alert.alertStyle = .critical
-        alert.addButton(withTitle: "Open Etcher instead")
-        alert.addButton(withTitle: "Confirm local write")
+        alert.addButton(withTitle: "Write + verify")
         alert.addButton(withTitle: "Cancel")
         let resp = alert.runModal()
-        if resp == .alertFirstButtonReturn {
-            openEtcher()
-            return
-        }
-        if resp != .alertSecondButtonReturn { return }
+        if resp != .alertFirstButtonReturn { return }
         runLocalImageWrite(image: img, dest: isoTargetNode)
+    }
+
+    @objc func rescanISOTargets() {
+        refreshLaneInventory()
+        appendLog("ISO targets rescanned in-app via diskutil list external\n")
     }
 
     func runLocalImageWrite(image: String, dest: String) {
@@ -2100,23 +2308,98 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             isoStatus.textColor = Theme.bad
             return
         }
-        if dest.hasPrefix("/dev/") {
-            isoStatus.stringValue = "last-resort dd not launched as root. Copied dd if=… of=… bs=4m. Open Etcher for a privileged USB write."
+        if isoWriting {
+            isoStatus.stringValue = "FLASH already running — wait for verify"
             isoStatus.textColor = Theme.warn
-            copyString("dd if=\(image) of=\(dest) bs=4m")
             return
         }
-        var isDir: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: dest, isDirectory: &isDir)
-        let destIsFile = dest.hasSuffix(".img") || dest.hasSuffix(".dmg") || dest.hasSuffix(".iso") || !exists || !isDir.boolValue
-        if destIsFile && dest.hasPrefix(kImagesDir) {
-            let out = Self.run("/usr/bin/hdiutil", ["convert", image, "-format", "UDRW", "-o", dest])
-            isoStatus.stringValue = "hdiutil convert → \(dest)\n" + String(out.prefix(400))
-            isoStatus.textColor = Theme.ok
+        isoWriting = true
+        if isoFlashBtn != nil { isoFlashBtn.isEnabled = false }
+        appendLog("\n—— ISO write " + isoNow() + "\nIMAGE " + image + "\nDEST " + dest + "\n")
+        isoStatus.stringValue = "writing in-app… progress in desk log"
+        isoStatus.textColor = Theme.warn
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            self.performImageWrite(image: image, dest: dest)
+        }
+    }
+
+    func performImageWrite(image: String, dest: String) {
+        classifyISOTarget()
+        if !isoTargetOK {
+            finishISOWrite(ok: false, msg: "FLASH aborted — dest refused: " + isoTargetReason)
             return
         }
-        isoStatus.stringValue = "FLASH refused — dest is not a removable disk node or images/ disk-image file."
-        isoStatus.textColor = Theme.bad
+        if dest.hasPrefix(kImagesDir) && (dest.hasSuffix(".img") || dest.hasSuffix(".dmg") || dest.hasSuffix(".iso")) {
+            appendLog("hdiutil convert -format UDRW\n")
+            let out = Self.runLong("/usr/bin/hdiutil", ["convert", image, "-format", "UDRW", "-o", dest], timeout: 3600) { [weak self] s in
+                self?.appendLog(s)
+            }
+            let verify = Self.run("/usr/sbin/diskutil", ["imageInfo", dest])
+            appendLog(verify + "\n")
+            let ok = FileManager.default.fileExists(atPath: dest) || FileManager.default.fileExists(atPath: dest + ".dmg")
+            finishISOWrite(ok: ok, msg: ok ? "hdiutil convert + imageInfo verify → " + dest : "hdiutil convert failed\n" + String(out.prefix(300)))
+            return
+        }
+        if dest.hasPrefix("/dev/disk") {
+            let info = Self.run("/usr/sbin/diskutil", ["info", dest])
+            appendLog(info + "\n")
+            if info.contains("APPLE SSD") || info.contains("Device Location:           Internal") || info.contains("qbitOS") || info.contains("MacBookPro") || info.contains("Macintosh HD") {
+                finishISOWrite(ok: false, msg: "FLASH refused after re-check — dest is Internal / vault / lab")
+                return
+            }
+            if !info.contains("Removable Media:           Yes") {
+                finishISOWrite(ok: false, msg: "FLASH refused after re-check — not Removable Media")
+                return
+            }
+            let work = NSTemporaryDirectory() + "fc-preserve-udrw"
+            let workDmg = work + ".dmg"
+            try? FileManager.default.removeItem(atPath: work)
+            try? FileManager.default.removeItem(atPath: workDmg)
+            var src = image
+            let low = image.lowercased()
+            if low.hasSuffix(".iso") || low.hasSuffix(".zip") {
+                appendLog("hdiutil convert → UDRW (in-app)\n")
+                _ = Self.runLong("/usr/bin/hdiutil", ["convert", image, "-format", "UDRW", "-o", work], timeout: 3600) { [weak self] s in
+                    self?.appendLog(s)
+                }
+                if FileManager.default.fileExists(atPath: work) {
+                    src = work
+                } else if FileManager.default.fileExists(atPath: workDmg) {
+                    src = workDmg
+                } else {
+                    finishISOWrite(ok: false, msg: "hdiutil convert failed — no UDRW ready")
+                    return
+                }
+            }
+            appendLog("diskutil unmountDisk force " + dest + "\n")
+            appendLog(Self.run("/usr/sbin/diskutil", ["unmountDisk", "force", dest]) + "\n")
+            appendLog("asr restore --source --target (in-app, streamed)\n")
+            let out = Self.runLong("/usr/sbin/asr", ["restore", "--source", src, "--target", dest, "--erase", "--noprompt"], timeout: 7200) { [weak self] s in
+                self?.appendLog(s)
+            }
+            let verify = Self.run("/usr/sbin/diskutil", ["info", dest])
+            appendLog(verify + "\n")
+            try? FileManager.default.removeItem(atPath: work)
+            try? FileManager.default.removeItem(atPath: workDmg)
+            let failed = out.lowercased().contains("fail") || out.lowercased().contains("error") || out.lowercased().contains("permission")
+            let ok = !failed && (out.contains("Restore completed") || out.contains("done") || out.contains("Completed"))
+            finishISOWrite(ok: ok, msg: ok ? "USB restore + diskutil info verify streamed in log" : "USB restore did not confirm — see desk log (admin may be required; no other app launched)")
+            return
+        }
+        finishISOWrite(ok: false, msg: "FLASH refused — dest is not a removable disk node or images/ disk-image file.")
+    }
+
+    func finishISOWrite(ok: Bool, msg: String) {
+        let work = {
+            self.isoWriting = false
+            self.isoStatus.stringValue = msg
+            self.isoStatus.textColor = ok ? Theme.ok : Theme.bad
+            self.appendLog(msg + "\n")
+            self.refreshISOFlashState()
+            self.refreshLaneInventory()
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
     }
 
     func isSafeImage(_ path: String) -> Bool {
@@ -2154,7 +2437,6 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     func refreshLaneInventory() {
         ensureImagesDir()
         cachedISOs = listImages()
-        etcherPresent = FileManager.default.fileExists(atPath: kEtcherApp)
         hfCliPath = Self.which("hf") ?? Self.which("huggingface-cli") ?? ""
         lmsPath = Self.which("lms") ?? ""
         if isoList != nil { applyISOLists() }
@@ -2193,7 +2475,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         } else {
             for line in tgts { t += line + "\n" }
         }
-        t += "Etcher: " + (etcherPresent ? kEtcherApp : "not installed") + " · hdiutil present · dd last resort + confirm"
+        t += "in-app writer · hdiutil + diskutil + asr · verify in desk log · no other flasher"
         isoTargetList.string = t
     }
 
@@ -2270,10 +2552,10 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         classifyISOTarget()
         let imgOK = isSafeImage(isoImagePath)
         let ready = imgOK && isoTargetOK
-        if isoFlashBtn != nil { isoFlashBtn.isEnabled = ready }
+        if isoFlashBtn != nil { isoFlashBtn.isEnabled = ready && !isoWriting }
         if isoStatus == nil { return }
         if selectedIDs.contains("brick") || selectedIDs.contains("baby") {
-            if isoFlashBtn != nil { isoFlashBtn.isEnabled = ready }
+            if isoFlashBtn != nil { isoFlashBtn.isEnabled = ready && !isoWriting }
             // phone/Brick stay non-dest; session note only
         }
         if ready {
@@ -2281,13 +2563,12 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             isoStatus.stringValue = "FLASH ready — image and removable dest accepted. Phone flash still locked." + extra
             isoStatus.textColor = Theme.ok
         } else if !imgOK && isoTargetNode.isEmpty {
-            isoStatus.stringValue = "FLASH locked — pick an image and a removable dest. Etcher route available. Phone linux-gate still locks phone flash."
+            isoStatus.stringValue = "FLASH locked — pick an image and a removable dest. In-app writer only. Phone linux-gate still locks phone flash."
             isoStatus.textColor = Theme.warn
         } else {
             isoStatus.stringValue = "FLASH locked — image " + (imgOK ? "ok" : "missing") + " · dest " + isoTargetReason
             isoStatus.textColor = Theme.warn
         }
-        if etcherBtn != nil { etcherBtn.isEnabled = FileManager.default.fileExists(atPath: kEtcherApp) }
     }
 
     func applyOSCatalog() {
@@ -2352,20 +2633,24 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         if let n = try? FileManager.default.contentsOfDirectory(atPath: lmsDir) {
             lmsEmpty = n.isEmpty
         } else { lmsEmpty = true }
-        let cli = hfCliPath.isEmpty ? "hf / huggingface-cli not on PATH · route: hf download <repo>" : hfCliPath
+        let cli = hfCliPath.isEmpty ? "hf / huggingface-cli not on PATH — scan stays local" : hfCliPath
         let lmsbin = lmsPath.isEmpty ? "lms not on PATH" : lmsPath
-        let app = FileManager.default.fileExists(atPath: kLMStudioApp) ? "app present" : "app missing"
+        let lmsDirPresent = FileManager.default.fileExists(atPath: NSHomeDirectory() + "/.lmstudio/models")
         let cacheTxt = hfCacheBytes > 0 ? fmtBytes(hfCacheBytes) : (hubOK ? "size pending" : "missing")
-        hfStatus.stringValue = "HF cache " + cacheTxt + "  ·  " + cli + "  ·  LM Studio " + app + "  ·  " + lmsbin + ". Will not download. Will not start a GPU host."
-        if cachedModels.isEmpty {
-            hfList.string = "no local HF hub models found. LM Studio models dir " + (lmsEmpty ? "empty" : "present") + "."
+        hfStatus.stringValue = "HF cache " + cacheTxt + "  ·  " + cli + "  ·  LM Studio cache " + (lmsDirPresent ? "present" : "missing") + "  ·  " + lmsbin + ". Browse/pin/remove-from-list in-app. Will not download. Will not launch LM Studio."
+        let rows = cachedModels.filter { !hfHidden.contains($0.2) }
+        if rows.isEmpty {
+            hfList.string = "no local HF hub models in the list. LM Studio models dir " + (lmsEmpty ? "empty" : "present") + ". Hidden " + String(hfHidden.count) + "."
             return
         }
         var s = "NAME                                      SIZE     PATH\n"
-        for (n, sz, path) in cachedModels {
-            let name = n.padding(toLength: 42, withPad: " ", startingAt: 0)
+        let pinned = rows.filter { hfPinned.contains($0.2) }
+        let rest = rows.filter { !hfPinned.contains($0.2) }
+        for (n, sz, path) in pinned + rest {
+            let mark = hfPinned.contains(path) ? "* " : "  "
+            let name = (mark + n).padding(toLength: 42, withPad: " ", startingAt: 0)
             let sizeTxt = sz > 0 ? fmtBytes(sz) : "unknown"
-            s += "\(name) \(padR(sizeTxt, 7))  \(path)\n"
+            s += name + " " + padR(sizeTxt, 7) + "  " + path + "\n"
         }
         hfList.string = s
     }
@@ -2441,13 +2726,80 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     @objc func openMotion() {
-        if let url = URL(string: kMotionURL) { NSWorkspace.shared.open(url) }
+        loadInAppURL(kMotionURL)
     }
 
     @objc func copyMotion() { copyString(kMotionURL) }
 
     @objc func openBloch() {
-        if blochUp, let url = URL(string: kBlochURL) { NSWorkspace.shared.open(url) }
+        loadInAppURL(kBlochURL)
+    }
+
+    func hubTokenSilent() -> String? {
+        guard let raw = try? String(contentsOfFile: kTokenPath, encoding: .utf8) else { return nil }
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+
+    func loadInAppURL(_ raw: String) {
+        guard motionWeb != nil, let url = URL(string: raw) else { return }
+        var req = URLRequest(url: url)
+        if let token = hubTokenSilent() {
+            req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+            req.setValue(token, forHTTPHeaderField: "X-Hub-Token")
+            var props: [HTTPCookiePropertyKey: Any] = [
+                .name: "hub_token",
+                .value: token,
+                .path: "/",
+            ]
+            if let host = url.host { props[.domain] = host }
+            if url.scheme == "https" { props[.secure] = true }
+            if let cookie = HTTPCookie(properties: props) {
+                motionWeb.configuration.websiteDataStore.httpCookieStore.setCookie(cookie) { [weak self] in
+                    self?.motionWeb.load(req)
+                }
+                if motionStatus != nil {
+                    motionStatus.stringValue = "loading in-app viewer · token attached as cookie/header (not printed)"
+                    motionStatus.textColor = Theme.warn
+                }
+                return
+            }
+        }
+        if motionStatus != nil {
+            motionStatus.stringValue = "loading in-app viewer · token file missing"
+            motionStatus.textColor = Theme.warn
+        }
+        motionWeb.load(req)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if motionStatus == nil { return }
+        let host = webView.url?.host ?? "page"
+        motionStatus.stringValue = "in-app viewer loaded · " + host + " · token " + (hubTokenSilent() != nil ? "attached (not printed)" : "file missing")
+        motionStatus.textColor = Theme.ok
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        if motionStatus == nil { return }
+        motionStatus.stringValue = "in-app viewer failed · " + error.localizedDescription
+        motionStatus.textColor = Theme.bad
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        if motionStatus == nil { return }
+        motionStatus.stringValue = "in-app viewer failed · " + error.localizedDescription
+        motionStatus.textColor = Theme.bad
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if navigationAction.navigationType == .linkActivated, navigationAction.targetFrame == nil {
+            if let url = navigationAction.request.url {
+                webView.load(URLRequest(url: url))
+            }
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
     }
 
     func copyString(_ s: String) {
@@ -3118,6 +3470,65 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         }
     }
 
+    @objc func deskProbe() {
+        appendLog("\n—— probe (in-app, no Terminal) " + isoNow() + "\n")
+        streamExec("/usr/bin/python3", [kPreservePy, "probe"], label: "probe")
+    }
+
+    @objc func deskDoctor() {
+        appendLog("\n—— doctor (in-app, no Terminal) " + isoNow() + "\n")
+        streamExec("/usr/bin/python3", [kPreservePy, "doctor"], label: "doctor")
+    }
+
+    func streamExec(_ path: String, _ args: [String], label: String, extra: ((String) -> Void)? = nil, done: ((Int32) -> Void)? = nil) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let out = PreserveWindow.runLong(path, args, timeout: 180) { chunk in
+                self?.appendLog(chunk)
+                if let extra = extra {
+                    DispatchQueue.main.async { extra(chunk) }
+                }
+            }
+            DispatchQueue.main.async {
+                self?.appendLog("—— " + label + " done (" + String(out.count) + " chars)\n")
+                done?(0)
+            }
+        }
+    }
+
+    static func runLong(_ path: String, _ args: [String], timeout: TimeInterval, onChunk: ((String) -> Void)? = nil) -> String {
+        let t = Process()
+        t.executableURL = URL(fileURLWithPath: path)
+        t.arguments = args
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? "")
+        env["PYTHONUNBUFFERED"] = "1"
+        t.environment = env
+        let pipe = Pipe()
+        t.standardOutput = pipe
+        t.standardError = pipe
+        var acc = ""
+        let lock = NSLock()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty { return }
+            if let s = String(data: data, encoding: .utf8) {
+                lock.lock(); acc += s; lock.unlock()
+                onChunk?(s)
+            }
+        }
+        do { try t.run() } catch { return "err \(error)" }
+        let deadline = Date().addingTimeInterval(timeout)
+        while t.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+        if t.isRunning { t.terminate() }
+        pipe.fileHandleForReading.readabilityHandler = nil
+        let tail = pipe.fileHandleForReading.readDataToEndOfFile()
+        if let s = String(data: tail, encoding: .utf8), !s.isEmpty {
+            acc += s
+            onChunk?(s)
+        }
+        return acc
+    }
+
     static func run(_ path: String, _ args: [String]) -> String {
         let t = Process()
         t.executableURL = URL(fileURLWithPath: path)
@@ -3193,6 +3604,8 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             let keep = Set(ids.filter { known.contains($0) })
             if !keep.isEmpty { selectedIDs = keep }
         }
+        if let pins = obj["hfPinned"] as? [String] { hfPinned = Set(pins) }
+        if let hid = obj["hfHidden"] as? [String] { hfHidden = Set(hid) }
         syncAliasFromSession()
         for cell in deviceCells {
             cell.on = selectedIDs.contains(cell.item.id)
@@ -3234,6 +3647,8 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             "w": f.size.width,
             "h": f.size.height,
             "selected": Array(selectedIDs).sorted(),
+            "hfPinned": Array(hfPinned).sorted(),
+            "hfHidden": Array(hfHidden).sorted(),
         ]
         writeJSON(kSeatJSON, doc)
     }

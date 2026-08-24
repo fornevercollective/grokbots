@@ -17,6 +17,10 @@ echo "swiftc $SRC/main.swift -> $APP"
   -O \
   -framework Cocoa \
   -framework Foundation \
+  -framework WebKit \
+  -framework AVKit \
+  -framework AVFoundation \
+  -framework UniformTypeIdentifiers \
   -o "$APP/Contents/MacOS/FC-Preserve" \
   "$SRC/main.swift"
 chmod +x "$APP/Contents/MacOS/FC-Preserve"
