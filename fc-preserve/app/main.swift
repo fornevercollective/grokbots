@@ -184,20 +184,20 @@ final class LogoTile: NSView {
         layer?.cornerRadius = 8
         layer?.borderWidth = 1.0
         translatesAutoresizingMaskIntoConstraints = false
-        icon = symbolView(item.symbol, size: 20)
-        captionLab = lab(item.caption, size: 9, weight: .medium, color: Theme.dim, wrap: true)
+        icon = symbolView(item.symbol, size: 15)
+        captionLab = lab(item.caption, size: 8, weight: .medium, color: Theme.dim, wrap: true)
         captionLab.alignment = .center
         addSubview(icon)
         addSubview(captionLab)
         toolTip = item.subtitle
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 72),
-            heightAnchor.constraint(equalToConstant: 68),
-            icon.topAnchor.constraint(equalTo: topAnchor, constant: 7),
+            widthAnchor.constraint(equalToConstant: 54),
+            heightAnchor.constraint(equalToConstant: 50),
+            icon.topAnchor.constraint(equalTo: topAnchor, constant: 4),
             icon.centerXAnchor.constraint(equalTo: centerXAnchor),
-            captionLab.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 3),
-            captionLab.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            captionLab.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            captionLab.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 2),
+            captionLab.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 1),
+            captionLab.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
         ])
         applyChrome()
     }
@@ -213,6 +213,73 @@ final class LogoTile: NSView {
 
     override func mouseDown(with event: NSEvent) {
         click?()
+    }
+}
+
+
+
+final class DeviceCell: NSView {
+    let item: PickerItem
+    let tile: LogoTile
+    let bar: StackBarView
+    let cap: NSTextField
+    var on: Bool {
+        get { tile.on }
+        set { tile.on = newValue }
+    }
+    var click: (() -> Void)? {
+        get { tile.click }
+        set { tile.click = newValue }
+    }
+
+    init(item: PickerItem) {
+        self.item = item
+        self.tile = LogoTile(item: item)
+        self.bar = StackBarView(frame: .zero)
+        self.cap = mono("0 / unknown", size: 8, color: Theme.mute)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        bar.unknown = true
+        cap.alignment = .center
+        cap.lineBreakMode = .byTruncatingTail
+        addSubview(tile)
+        addSubview(bar)
+        addSubview(cap)
+        toolTip = item.subtitle
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 54),
+            heightAnchor.constraint(equalToConstant: 74),
+            tile.topAnchor.constraint(equalTo: topAnchor),
+            tile.centerXAnchor.constraint(equalTo: centerXAnchor),
+            bar.topAnchor.constraint(equalTo: tile.bottomAnchor, constant: 3),
+            bar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            bar.heightAnchor.constraint(equalToConstant: 6),
+            cap.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 1),
+            cap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 1),
+            cap.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
+            cap.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:)") }
+
+    func applyStats(used: Int64, free: Int64, known: Bool, note: String) {
+        bar.unknown = !known
+        bar.used = Double(max(0, used))
+        bar.free = Double(max(0, free))
+        bar.needsDisplay = true
+        if known {
+            cap.stringValue = "\(fmtBytes(used)) / \(fmtBytes(free))"
+            cap.textColor = Theme.dim
+        } else {
+            cap.stringValue = "0 / unknown"
+            cap.textColor = Theme.mute
+        }
+        toolTip = item.subtitle + " · " + note
+        tile.toolTip = toolTip
     }
 }
 
@@ -249,6 +316,11 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var targetPane: NSView!
     var backupPane: NSView!
     var logoTiles: [LogoTile] = []
+    var deviceCells: [DeviceCell] = []
+    var idBody: NSTextField!
+    var thumbNote: NSTextField!
+    var thumbSlots: [NSImageView] = []
+    var thumbCaps: [NSTextField] = []
     var selectedIDs: Set<String> = ["baby"]
     var lastPhoneUsed: Int64 = 0
     var lastPhoneFree: Int64 = 0
@@ -298,7 +370,6 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
     var drivesView: NSTextView!
     var flagsView: NSTextView!
-    var barsStack: NSStackView!
     var partCamera: NSTextField!
     var partSensors: NSTextField!
     var partStorage: NSTextField!
@@ -321,7 +392,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var blochUp = false
 
     func build() {
-        let rect = NSRect(x: 0, y: 0, width: 1280, height: 860)
+        let rect = NSRect(x: 0, y: 0, width: 1560, height: 940)
         window = NSWindow(
             contentRect: rect,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -329,7 +400,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             defer: false
         )
         window.title = "FC-Preserve"
-        window.minSize = NSSize(width: 1100, height: 720)
+        window.minSize = NSSize(width: 1280, height: 800)
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.appearance = NSAppearance(named: .darkAqua)
@@ -343,10 +414,18 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         root.layer?.backgroundColor = Theme.bg.cgColor
         window.contentView = root
 
+        let strip = makeDeviceStrip()
+        strip.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(strip)
+
         let header = lab("FC-Preserve", size: 22, weight: .semibold, color: Theme.text)
         let sub = lab("desk  ·  backup  ·  extract  ·  catalog  ·  SHA-256  ·  gate", size: 12, weight: .regular, color: Theme.dim)
         root.addSubview(header)
         root.addSubview(sub)
+
+        let left = makeThumbsPane()
+        left.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(left)
 
         let stepper = makeStepper()
         stepper.translatesAutoresizingMaskIntoConstraints = false
@@ -366,10 +445,10 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             pane.translatesAutoresizingMaskIntoConstraints = false
             card.addSubview(pane)
             NSLayoutConstraint.activate([
-                pane.topAnchor.constraint(equalTo: card.topAnchor, constant: 18),
-                pane.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 18),
-                pane.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18),
-                pane.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -14),
+                pane.topAnchor.constraint(equalTo: card.topAnchor, constant: 14),
+                pane.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+                pane.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+                pane.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
             ])
         }
 
@@ -395,20 +474,28 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         root.addSubview(footNote)
 
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
+            strip.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            strip.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+            strip.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
+            strip.heightAnchor.constraint(equalToConstant: 108),
+            header.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10),
             header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24),
             sub.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 2),
             sub.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            left.topAnchor.constraint(equalTo: sub.bottomAnchor, constant: 12),
+            left.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+            left.widthAnchor.constraint(equalToConstant: 420),
+            left.bottomAnchor.constraint(equalTo: primaryBtn.topAnchor, constant: -14),
             stepper.topAnchor.constraint(equalTo: sub.bottomAnchor, constant: 12),
-            stepper.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24),
-            stepper.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -24),
-            stepper.heightAnchor.constraint(equalToConstant: 40),
-            card.topAnchor.constraint(equalTo: stepper.bottomAnchor, constant: 12),
-            card.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-            card.widthAnchor.constraint(equalToConstant: 500),
-            card.bottomAnchor.constraint(equalTo: primaryBtn.topAnchor, constant: -14),
-            desk.topAnchor.constraint(equalTo: stepper.bottomAnchor, constant: 12),
-            desk.leadingAnchor.constraint(equalTo: card.trailingAnchor, constant: 12),
+            stepper.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: 12),
+            stepper.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
+            stepper.heightAnchor.constraint(equalToConstant: 36),
+            card.topAnchor.constraint(equalTo: stepper.bottomAnchor, constant: 8),
+            card.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: 12),
+            card.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
+            card.heightAnchor.constraint(equalToConstant: 210),
+            desk.topAnchor.constraint(equalTo: card.bottomAnchor, constant: 10),
+            desk.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: 12),
             desk.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
             desk.bottomAnchor.constraint(equalTo: primaryBtn.topAnchor, constant: -14),
             primaryBtn.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
@@ -441,7 +528,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         let screen = NSScreen.screens.first ?? NSScreen.main
         if let screen = screen {
             let vis = screen.visibleFrame
-            let size = NSSize(width: min(1280, vis.width - 40), height: min(860, vis.height - 40))
+            let size = NSSize(width: min(1560, vis.width - 24), height: min(940, vis.height - 24))
             let origin = NSPoint(x: vis.midX - size.width / 2, y: vis.midY - size.height / 2)
             window.setFrame(NSRect(origin: origin, size: size), display: true)
         }
@@ -503,84 +590,209 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         return row
     }
 
-    private func makeDevicePane() -> NSView {
-        let v = NSView()
-        let title = lab("SELECT DEVICE", size: 16, weight: .semibold, color: Theme.text)
-        v.addSubview(title)
-        let how = lab("Logos · click any and all. Orange = selected. Gray = idle. Backup still preserve.py all GrokBotBaby when mux is up.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
-        v.addSubview(how)
+    private func makeDeviceStrip() -> NSView {
+        let wrap = NSView()
+        wrap.wantsLayer = true
+        wrap.layer?.backgroundColor = Theme.card.cgColor
+        wrap.layer?.cornerRadius = 10
+        wrap.layer?.borderWidth = 1.0
+        wrap.layer?.borderColor = Theme.accent.withAlphaComponent(0.55).cgColor
+
+        let tag = lab("SELECT DEVICE", size: 10, weight: .semibold, color: Theme.accent)
+        wrap.addSubview(tag)
+        let how = lab("one row · click any/all · orange selected · gray idle · bar under every logo is that device", size: 10, weight: .regular, color: Theme.mute)
+        wrap.addSubview(how)
 
         let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.hasHorizontalScroller = false
+        scroll.hasVerticalScroller = false
+        scroll.hasHorizontalScroller = true
+        scroll.autohidesScrollers = true
         scroll.borderType = .noBorder
         scroll.drawsBackground = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
-        v.addSubview(scroll)
-        let doc = NSView()
-        doc.translatesAutoresizingMaskIntoConstraints = false
-        scroll.documentView = doc
+        wrap.addSubview(scroll)
 
         let items = householdPicker()
-        logoTiles = items.map { LogoTile(item: $0) }
-        let cols = 5
-        var rows: [NSStackView] = []
-        var i = 0
-        while i < logoTiles.count {
-            let slice = Array(logoTiles[i..<min(i + cols, logoTiles.count)])
-            for tile in slice {
-                tile.on = selectedIDs.contains(tile.item.id)
-                tile.click = { [weak self, id = tile.item.id] in
-                    self?.toggleLogo(id)
-                }
+        deviceCells = items.map { DeviceCell(item: $0) }
+        logoTiles = deviceCells.map { $0.tile }
+        for cell in deviceCells {
+            cell.on = selectedIDs.contains(cell.item.id)
+            cell.click = { [weak self, id = cell.item.id] in
+                self?.toggleLogo(id)
             }
-            let row = NSStackView(views: slice)
-            row.orientation = .horizontal
-            row.spacing = 6
-            row.alignment = .top
-            row.translatesAutoresizingMaskIntoConstraints = false
-            rows.append(row)
-            i += cols
         }
-        let grid = NSStackView(views: rows)
+        let row = NSStackView(views: deviceCells)
+        row.orientation = .horizontal
+        row.spacing = 4
+        row.alignment = .top
+        row.translatesAutoresizingMaskIntoConstraints = false
+        let doc = NSView()
+        doc.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(row)
+        scroll.documentView = doc
+        NSLayoutConstraint.activate([
+            tag.topAnchor.constraint(equalTo: wrap.topAnchor, constant: 6),
+            tag.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 10),
+            how.centerYAnchor.constraint(equalTo: tag.centerYAnchor),
+            how.leadingAnchor.constraint(equalTo: tag.trailingAnchor, constant: 10),
+            how.trailingAnchor.constraint(lessThanOrEqualTo: wrap.trailingAnchor, constant: -10),
+            scroll.topAnchor.constraint(equalTo: tag.bottomAnchor, constant: 4),
+            scroll.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 8),
+            scroll.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -8),
+            scroll.bottomAnchor.constraint(equalTo: wrap.bottomAnchor, constant: -6),
+            row.topAnchor.constraint(equalTo: doc.topAnchor),
+            row.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
+            row.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
+            doc.heightAnchor.constraint(equalTo: scroll.contentView.heightAnchor),
+            doc.widthAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.widthAnchor),
+        ])
+        return wrap
+    }
+
+    private func makeThumbsPane() -> NSView {
+        let wrap = NSView()
+        wrap.wantsLayer = true
+        wrap.layer?.backgroundColor = Theme.card.cgColor
+        wrap.layer?.cornerRadius = 12
+
+        let h = sectionTitle("THUMBNAILS + DATA", symbol: "photo.on.rectangle")
+        wrap.addSubview(h)
+        idBody = lab("GrokBotBaby · identity below. IMEI / Find My never shown.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        wrap.addSubview(idBody)
+        usbBadge = lab("USB: probing…", size: 12, weight: .semibold, color: Theme.warn, wrap: true)
+        wrap.addSubview(usbBadge)
+        usbDetail = mono("", size: 10.5, color: Theme.dim, wrap: true)
+        wrap.addSubview(usbDetail)
+
+        let grid = NSStackView()
         grid.orientation = .vertical
         grid.spacing = 6
-        grid.alignment = .leading
         grid.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(grid)
-        NSLayoutConstraint.activate([
-            grid.topAnchor.constraint(equalTo: doc.topAnchor),
-            grid.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
-            grid.trailingAnchor.constraint(lessThanOrEqualTo: doc.trailingAnchor),
-            grid.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
-            doc.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-        ])
+        wrap.addSubview(grid)
+        thumbSlots = []
+        thumbCaps = []
+        var rowViews: [NSView] = []
+        for i in 0..<6 {
+            let box = NSView()
+            box.wantsLayer = true
+            box.layer?.backgroundColor = Theme.inset.cgColor
+            box.layer?.cornerRadius = 6
+            box.layer?.borderWidth = 1
+            box.layer?.borderColor = Theme.stepOff.cgColor
+            box.translatesAutoresizingMaskIntoConstraints = false
+            let iv = NSImageView()
+            iv.translatesAutoresizingMaskIntoConstraints = false
+            iv.imageScaling = .scaleProportionallyUpOrDown
+            iv.imageAlignment = .alignCenter
+            let cap = lab("empty", size: 9, weight: .regular, color: Theme.mute)
+            cap.alignment = .center
+            box.addSubview(iv)
+            box.addSubview(cap)
+            NSLayoutConstraint.activate([
+                box.heightAnchor.constraint(equalToConstant: 78),
+                iv.topAnchor.constraint(equalTo: box.topAnchor, constant: 4),
+                iv.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 4),
+                iv.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -4),
+                iv.bottomAnchor.constraint(equalTo: cap.topAnchor, constant: -2),
+                cap.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 2),
+                cap.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -2),
+                cap.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -3),
+            ])
+            thumbSlots.append(iv)
+            thumbCaps.append(cap)
+            rowViews.append(box)
+            if rowViews.count == 3 || i == 5 {
+                let r = NSStackView(views: rowViews)
+                r.orientation = .horizontal
+                r.distribution = .fillEqually
+                r.spacing = 6
+                r.translatesAutoresizingMaskIntoConstraints = false
+                grid.addArrangedSubview(r)
+                rowViews = []
+            }
+        }
 
-        deviceHint = lab("GrokBotBaby selected — vault-first backup. Flash stays locked until linux-gate.json ready.", size: 12, weight: .regular, color: Theme.dim, wrap: true)
-        v.addSubview(deviceHint)
-        usbBadge = lab("USB: probing…", size: 13, weight: .semibold, color: Theme.warn, wrap: true)
-        v.addSubview(usbBadge)
-        usbDetail = mono("", size: 11, color: Theme.dim, wrap: true)
-        v.addSubview(usbDetail)
+        thumbNote = lab("no vault media · no AFC pull · mux empty — empty slots are honest, not placeholders of real photos.", size: 10.5, weight: .regular, color: Theme.warn, wrap: true)
+        wrap.addSubview(thumbNote)
+
+        var cam: NSTextField!
+        var sen: NSTextField!
+        var sto: NSTextField!
+        var ids: NSTextField!
+        let c1 = partCard(symbol: "camera.fill", title: "CAMERA", body: &cam)
+        let c2 = partCard(symbol: "gyroscope", title: "SENSORS", body: &sen)
+        let c3 = partCard(symbol: "sdcard", title: "STORAGE", body: &sto)
+        let c4 = partCard(symbol: "barcode", title: "UNIQUE IDs", body: &ids)
+        partCamera = cam
+        partSensors = sen
+        partStorage = sto
+        partIDs = ids
+        let partsA = NSStackView(views: [c1, c2])
+        partsA.orientation = .horizontal
+        partsA.distribution = .fillEqually
+        partsA.spacing = 6
+        partsA.translatesAutoresizingMaskIntoConstraints = false
+        let partsB = NSStackView(views: [c3, c4])
+        partsB.orientation = .horizontal
+        partsB.distribution = .fillEqually
+        partsB.spacing = 6
+        partsB.translatesAutoresizingMaskIntoConstraints = false
+        wrap.addSubview(partsA)
+        wrap.addSubview(partsB)
+
+        deviceHint = lab("GrokBotBaby selected — vault-first backup. Flash stays locked until linux-gate.json ready.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        wrap.addSubview(deviceHint)
+
+        NSLayoutConstraint.activate([
+            h.topAnchor.constraint(equalTo: wrap.topAnchor, constant: 12),
+            h.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            h.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            idBody.topAnchor.constraint(equalTo: h.bottomAnchor, constant: 8),
+            idBody.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            idBody.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            usbBadge.topAnchor.constraint(equalTo: idBody.bottomAnchor, constant: 8),
+            usbBadge.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            usbBadge.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            usbDetail.topAnchor.constraint(equalTo: usbBadge.bottomAnchor, constant: 4),
+            usbDetail.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            usbDetail.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            grid.topAnchor.constraint(equalTo: usbDetail.bottomAnchor, constant: 10),
+            grid.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            grid.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            thumbNote.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 6),
+            thumbNote.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            thumbNote.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            partsA.topAnchor.constraint(equalTo: thumbNote.bottomAnchor, constant: 10),
+            partsA.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            partsA.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            partsB.topAnchor.constraint(equalTo: partsA.bottomAnchor, constant: 6),
+            partsB.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            partsB.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            deviceHint.topAnchor.constraint(equalTo: partsB.bottomAnchor, constant: 10),
+            deviceHint.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
+            deviceHint.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            deviceHint.bottomAnchor.constraint(lessThanOrEqualTo: wrap.bottomAnchor, constant: -12),
+        ])
+        return wrap
+    }
+
+    private func makeDevicePane() -> NSView {
+        let v = NSView()
+        let title = lab("BACKUP 3-STEP", size: 15, weight: .semibold, color: Theme.text)
+        v.addSubview(title)
+        let how = lab("Device pick is the top row. This card is vault + verify only. Flash stays locked for phone / Internal / vault.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        v.addSubview(how)
+        let note = lab("Step 1 of 3 — logos already live up top. Continue to pick the vault dest.", size: 12, weight: .regular, color: Theme.dim, wrap: true)
+        v.addSubview(note)
         NSLayoutConstraint.activate([
             title.topAnchor.constraint(equalTo: v.topAnchor),
             title.leadingAnchor.constraint(equalTo: v.leadingAnchor),
             how.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 6),
             how.leadingAnchor.constraint(equalTo: v.leadingAnchor),
             how.trailingAnchor.constraint(equalTo: v.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: how.bottomAnchor, constant: 8),
-            scroll.leadingAnchor.constraint(equalTo: v.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: v.trailingAnchor),
-            scroll.heightAnchor.constraint(equalToConstant: 290),
-            deviceHint.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 8),
-            deviceHint.leadingAnchor.constraint(equalTo: v.leadingAnchor),
-            deviceHint.trailingAnchor.constraint(equalTo: v.trailingAnchor),
-            usbBadge.topAnchor.constraint(equalTo: deviceHint.bottomAnchor, constant: 10),
-            usbBadge.leadingAnchor.constraint(equalTo: v.leadingAnchor),
-            usbBadge.trailingAnchor.constraint(equalTo: v.trailingAnchor),
-            usbDetail.topAnchor.constraint(equalTo: usbBadge.bottomAnchor, constant: 6),
-            usbDetail.leadingAnchor.constraint(equalTo: v.leadingAnchor),
-            usbDetail.trailingAnchor.constraint(equalTo: v.trailingAnchor),
+            note.topAnchor.constraint(equalTo: how.bottomAnchor, constant: 10),
+            note.leadingAnchor.constraint(equalTo: v.leadingAnchor),
+            note.trailingAnchor.constraint(equalTo: v.trailingAnchor),
         ])
         return v
     }
@@ -773,39 +985,6 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         flagsScroll.heightAnchor.constraint(equalToConstant: 72).isActive = true
         doc.addSubview(flagsScroll)
 
-        let h2 = sectionTitle("PARTS", symbol: "cpu")
-        doc.addSubview(h2)
-        var cam: NSTextField!
-        var sen: NSTextField!
-        var sto: NSTextField!
-        var ids: NSTextField!
-        let c1 = partCard(symbol: "camera.fill", title: "CAMERA", body: &cam)
-        let c2 = partCard(symbol: "gyroscope", title: "SENSORS", body: &sen)
-        let c3 = partCard(symbol: "sdcard", title: "STORAGE", body: &sto)
-        let c4 = partCard(symbol: "barcode", title: "UNIQUE IDs", body: &ids)
-        partCamera = cam
-        partSensors = sen
-        partStorage = sto
-        partIDs = ids
-        let parts = NSStackView(views: [c1, c2, c3, c4])
-        parts.orientation = .horizontal
-        parts.distribution = .fillEqually
-        parts.spacing = 8
-        parts.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(parts)
-
-        let h3 = sectionTitle("STORAGE DISTRIBUTION", symbol: "chart.bar.fill")
-        doc.addSubview(h3)
-        let under = lab("Selected logos drive these bars. Unknown = 0 / unknown. No guessed sizes.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
-        under.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(under)
-        barsStack = NSStackView()
-        barsStack.orientation = .vertical
-        barsStack.alignment = .leading
-        barsStack.spacing = 10
-        barsStack.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(barsStack)
-
         let hISO = sectionTitle("ISO / USB TOOLS", symbol: "opticaldisc")
         doc.addSubview(hISO)
         let isoHow = lab("Etcher-shaped, local routes only. SELECT IMAGE → SELECT TARGET → FLASH + verify. Never the iPhone, never Internal APFS, never the Data vault, never qbitOS. Phone linux-gate still locks phone flash.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
@@ -960,22 +1139,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             flagsScroll.topAnchor.constraint(equalTo: drvScroll.bottomAnchor, constant: 6),
             flagsScroll.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
             flagsScroll.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            h2.topAnchor.constraint(equalTo: flagsScroll.bottomAnchor, constant: 14),
-            h2.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            h2.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            parts.topAnchor.constraint(equalTo: h2.bottomAnchor, constant: 6),
-            parts.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            parts.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            parts.heightAnchor.constraint(greaterThanOrEqualToConstant: 88),
-            h3.topAnchor.constraint(equalTo: parts.bottomAnchor, constant: 14),
-            h3.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            under.topAnchor.constraint(equalTo: h3.bottomAnchor, constant: 4),
-            under.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            under.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            barsStack.topAnchor.constraint(equalTo: under.bottomAnchor, constant: 8),
-            barsStack.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            barsStack.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            hISO.topAnchor.constraint(equalTo: barsStack.bottomAnchor, constant: 14),
+            hISO.topAnchor.constraint(equalTo: flagsScroll.bottomAnchor, constant: 14),
             hISO.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
             isoHow.topAnchor.constraint(equalTo: hISO.bottomAnchor, constant: 4),
             isoHow.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
@@ -1116,8 +1280,10 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             tile.on = selectedIDs.contains(tile.item.id)
         }
         refreshPickerHint()
-        applyParts(phoneUsed: 0, phoneFree: 0, phoneKnown: false)
+        refreshIdentity()
+        applyParts(phoneUsed: lastPhoneUsed, phoneFree: lastPhoneFree, phoneKnown: lastPhoneKnown)
         rebuildStorageBars()
+        refreshThumbs()
     }
 
     func refreshPickerHint() {
@@ -1172,22 +1338,193 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     func rebuildStorageBars() {
-        guard barsStack != nil else { return }
-        for v in barsStack.arrangedSubviews {
-            barsStack.removeArrangedSubview(v)
-            v.removeFromSuperview()
+        if deviceCells.isEmpty { return }
+        for cell in deviceCells {
+            let s = statsForItem(cell.item)
+            cell.applyStats(used: s.0, free: s.1, known: s.2, note: s.3)
         }
-        let catalog = householdPicker()
-        let chosen = catalog.filter { selectedIDs.contains($0.id) }
-        if chosen.isEmpty {
-            barsStack.addArrangedSubview(lab("nothing selected", size: 11, weight: .regular, color: Theme.mute))
-            return
+    }
+
+    func statsForItem(_ item: PickerItem) -> (Int64, Int64, Bool, String) {
+        switch item.id {
+        case "internal":
+            if let d = driveNamed("Internal") ?? lastDrives.first(where: { $0.mount == "/" }) {
+                return (d.used, d.free, d.size > 0, "\(d.mount) · flagged tight if free < 50 Gi")
+            }
+            return (0, 0, false, "not mounted")
+        case "mbpvol":
+            if let d = lastDrives.first(where: { $0.mount == "/Volumes/MacBookPro" }) {
+                return (d.used, d.free, d.size > 0, d.mount)
+            }
+            return (0, 0, false, "volume not mounted")
+        case "vault":
+            if let d = lastDrives.first(where: { $0.mount == "/Volumes/MacBookPro - Data" }) {
+                return (d.used, d.free, d.size > 0, "\(d.mount) · dest \(kDefaultVault)")
+            }
+            return (0, 0, false, "MacBookPro - Data not mounted")
+        case "qbitos":
+            if let d = lastDrives.first(where: { $0.mount == "/Volumes/qbitOS" }) {
+                return (d.used, d.free, d.size > 0, "lab SSD · not the vault")
+            }
+            return (0, 0, false, "not mounted")
+        case "usbphone", "baby":
+            return (lastPhoneUsed, lastPhoneFree, lastPhoneKnown, lastMux.isEmpty ? "mux empty · no fs mount" : "mux up")
+        case "brick":
+            return (0, 0, false, "Continuity daily · size unknown until that phone is on mux")
+        case "mini":
+            if let d = lastDrives.first(where: { $0.mount == "/" }) {
+                return (d.used, d.free, d.size > 0, "tadericsonsMini Internal")
+            }
+            return (0, 0, false, "tadericsonsMini")
+        case "mbp2019":
+            return (0, 0, false, lastMBPNote)
+        case "kinect":
+            return (0, 0, false, lastKinectNote)
+        case "nestcam":
+            return (0, 0, false, lastNestNote)
+        case "wifi":
+            return (0, 0, false, lastWifiNote)
+        case "ble":
+            return (0, 0, false, "Brick Continuity path · no BLE session claimed")
+        case "nfc":
+            return (0, 0, false, "Wallet / Continuity route only · no session claimed")
+        case "usbhub":
+            return (0, 0, false, lastUSBHubNote)
+        case "qm2":
+            return (0, 0, false, lastQm2Note)
+        case "bridge":
+            return (0, 0, false, lastBridgeNote)
+        case "nest1", "nest2", "yale1", "yale2", "tv", "console":
+            return (0, 0, false, lastIoTNote(item.id))
+        case "iso":
+            let used = cachedISOs.reduce(Int64(0)) { $0 + $1.1 }
+            return (used, 0, !cachedISOs.isEmpty, cachedISOs.isEmpty ? "library empty — no size" : "\(cachedISOs.count) file(s) in images/")
+        case "osimg":
+            let present = FileManager.default.fileExists(atPath: kImageCatalog)
+            return (0, 0, false, present ? "catalog.json notes only — no golden ISO" : "catalog.json not written yet")
+        case "models":
+            return (hfCacheBytes, 0, hfCacheBytes > 0, hfCacheBytes > 0 ? "local hub only — will not download" : "size pending / unknown")
+        case "andslot":
+            return (0, 0, false, "reserved next lane")
+        default:
+            return (0, 0, false, item.subtitle)
         }
-        for item in chosen {
-            let row = barForItem(item)
-            barsStack.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: barsStack.widthAnchor).isActive = true
+    }
+
+    func refreshThumbs() {
+        if thumbSlots.isEmpty { return }
+        let found = findMediaThumbs()
+        for (i, slot) in thumbSlots.enumerated() {
+            if i < found.count {
+                let (path, kind) = found[i]
+                if kind == "image", let img = NSImage(contentsOfFile: path) {
+                    slot.image = img
+                    slot.contentTintColor = nil
+                    thumbCaps[i].stringValue = (path as NSString).lastPathComponent
+                    thumbCaps[i].textColor = Theme.dim
+                    slot.superview?.layer?.borderColor = Theme.accent.withAlphaComponent(0.45).cgColor
+                } else {
+                    slot.image = nil
+                    if #available(macOS 11.0, *) {
+                        let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+                        slot.image = NSImage(systemSymbolName: kind == "video" ? "film" : "photo", accessibilityDescription: kind)?.withSymbolConfiguration(cfg)
+                    }
+                    slot.contentTintColor = Theme.mute
+                    thumbCaps[i].stringValue = (path as NSString).lastPathComponent
+                    thumbCaps[i].textColor = Theme.dim
+                    slot.superview?.layer?.borderColor = Theme.stepOff.cgColor
+                }
+            } else {
+                slot.image = nil
+                if #available(macOS 11.0, *) {
+                    let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+                    slot.image = NSImage(systemSymbolName: "photo", accessibilityDescription: "empty")?.withSymbolConfiguration(cfg)
+                }
+                slot.contentTintColor = Theme.stepOff
+                thumbCaps[i].stringValue = "empty"
+                thumbCaps[i].textColor = Theme.mute
+                slot.superview?.layer?.borderColor = Theme.stepOff.cgColor
+            }
         }
+        if found.isEmpty {
+            var line = "no vault media · no AFC pull"
+            if lastMuxEmpty { line += " · mux empty" }
+            if lastHotspot { line += " · Personal Hotspot has the cable — turn hotspot off, unlock, Trust" }
+            line += " — empty slots are honest, not fake photos."
+            thumbNote.stringValue = line
+            thumbNote.textColor = Theme.warn
+        } else {
+            thumbNote.stringValue = "\(found.count) file(s) on disk (vault extract / AFC / live.jpg). Not inventing frames."
+            thumbNote.textColor = Theme.ok
+        }
+    }
+
+    func findMediaThumbs() -> [(String, String)] {
+        var out: [(String, String)] = []
+        let fm = FileManager.default
+        let imgExt = Set(["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "tif", "tiff", "bmp"])
+        let vidExt = Set(["mov", "mp4", "m4v", "avi"])
+        var roots: [String] = [
+            kDefaultVault + "/GrokBotBaby",
+            kDefaultVault + "/Brick",
+            "/tmp/live.jpg",
+        ]
+        if let vols = try? fm.contentsOfDirectory(atPath: "/Volumes") {
+            for n in vols {
+                let low = n.lowercased()
+                if low.contains("iphone") || low.contains("dcim") || low.contains("afc") {
+                    roots.append("/Volumes/" + n)
+                }
+            }
+        }
+        for root in roots {
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: root, isDirectory: &isDir) == false { continue }
+            if !isDir.boolValue {
+                let ext = (root as NSString).pathExtension.lowercased()
+                if imgExt.contains(ext) { out.append((root, "image")) }
+                else if vidExt.contains(ext) { out.append((root, "video")) }
+                continue
+            }
+            guard let en = fm.enumerator(atPath: root) else { continue }
+            var seen = 0
+            while let rel = en.nextObject() as? String {
+                let low = rel.lowercased()
+                if low.contains("/backup/") && !low.contains("/media/") { continue }
+                let ext = (rel as NSString).pathExtension.lowercased()
+                if imgExt.contains(ext) {
+                    out.append((root + "/" + rel, "image"))
+                    seen += 1
+                } else if vidExt.contains(ext) {
+                    out.append((root + "/" + rel, "video"))
+                    seen += 1
+                }
+                if seen >= 12 { break }
+            }
+        }
+        return Array(out.prefix(6))
+    }
+
+    func refreshIdentity() {
+        if idBody == nil { return }
+        let names = householdPicker().filter { selectedIDs.contains($0.id) }.map { $0.caption }
+        let joined = names.joined(separator: ", ")
+        var lines = "Selected: \(joined)"
+        if selectedIDs.contains("baby") {
+            lines += "\nGrokBotBaby · iPhone 7 Plus · iPhone9,4 D111AP A10 · iOS 15.1"
+            lines += "\nUDID \(kBabyUDID)"
+            lines += "\nSerial \(kBabySerial)"
+            lines += "\nIMEI / Find My never shown."
+        } else if selectedIDs.contains("brick") {
+            lines += "\nBrick · daily Continuity iPhone"
+            lines += "\nUDID unknown until that phone is on mux."
+            lines += "\nIMEI / Find My never shown."
+        } else {
+            lines += "\nNo phone in the set. Public GrokBotBaby UDID still listed for the vault path:"
+            lines += "\nUDID \(kBabyUDID)  ·  Serial \(kBabySerial)"
+            lines += "\nIMEI / Find My never shown."
+        }
+        idBody.stringValue = lines
     }
 
     func barForItem(_ item: PickerItem) -> NSView {
@@ -1944,6 +2281,8 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         }
         applyParts(phoneUsed: s.phoneUsed, phoneFree: s.phoneFree, phoneKnown: s.phoneKnown)
         rebuildStorageBars()
+        refreshIdentity()
+        refreshThumbs()
         if isoList != nil { applyISOLists() }
         rebuildRoutes(s)
         applyMotion(s)
