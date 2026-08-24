@@ -24,6 +24,14 @@ python3 fc-preserve/preserve.py --help
 
 CLI: `scripts/fcs` → `python3 fc-preserve/preserve.py`.
 
+Native AppKit 3-step (not Electron, not SwiftUI, not Etcher):
+
+```bash
+open dist/FC-Preserve.app
+# sources: fc-preserve/app/   build: fc-preserve/app/build.sh
+```
+
+
 ### Devices
 
 | Alias | What | Flash |
