@@ -3,6 +3,10 @@ import Foundation
 
 let kPreservePy = "/Volumes/qbitOS/00.dev/grokbotsGH/fc-preserve/preserve.py"
 let kDefaultVault = "/Volumes/MacBookPro - Data/FC-Preserve"
+let kImagesDir = "/Volumes/MacBookPro - Data/FC-Preserve/images"
+let kImageCatalog = kImagesDir + "/catalog.json"
+let kEtcherApp = "/Applications/balenaEtcher.app"
+let kLMStudioApp = "/Applications/LM Studio.app"
 let kIdevice = "/opt/homebrew/bin/idevice_id"
 let kBabyUDID = "4ea7e05b3045f0e9036275125a85225dd6dd9bb9"
 let kBabySerial = "FCDTR1N8HFY7"
@@ -126,6 +130,93 @@ final class StackBarView: NSView {
     }
 }
 
+struct PickerItem {
+    var id: String
+    var symbol: String
+    var caption: String
+    var kind: String
+    var subtitle: String
+}
+
+func householdPicker() -> [PickerItem] {
+    return [
+        PickerItem(id: "baby", symbol: "iphone", caption: "Baby", kind: "phone", subtitle: "GrokBotBaby · iPhone 7 Plus USB"),
+        PickerItem(id: "brick", symbol: "iphone", caption: "Brick", kind: "phone", subtitle: "daily Continuity iPhone"),
+        PickerItem(id: "mini", symbol: "desktopcomputer", caption: "Mini", kind: "desktop", subtitle: "tadericsonsMini"),
+        PickerItem(id: "mbp2019", symbol: "laptopcomputer", caption: "2019 MBP", kind: "laptop", subtitle: "grokpool-laptop · machines.json"),
+        PickerItem(id: "internal", symbol: "internaldrive", caption: "Internal", kind: "storage", subtitle: "/"),
+        PickerItem(id: "mbpvol", symbol: "externaldrive", caption: "MBP vol", kind: "storage", subtitle: "/Volumes/MacBookPro"),
+        PickerItem(id: "vault", symbol: "externaldrive", caption: "Vault", kind: "storage", subtitle: "/Volumes/MacBookPro - Data"),
+        PickerItem(id: "qbitos", symbol: "externaldrive", caption: "qbitOS", kind: "storage", subtitle: "/Volumes/qbitOS"),
+        PickerItem(id: "usbphone", symbol: "externaldrive", caption: "USB phone", kind: "storage", subtitle: "iPhone USB · no fs mount when hotspot"),
+        PickerItem(id: "kinect", symbol: "camera.fill", caption: "Kinect", kind: "camera", subtitle: "leftover Xbox Kinect"),
+        PickerItem(id: "nestcam", symbol: "camera.fill", caption: "Nest cam", kind: "camera", subtitle: "old Nest · Google A0005"),
+        PickerItem(id: "nest1", symbol: "hifispeaker.fill", caption: "Nest 1", kind: "iot", subtitle: "Nest pod"),
+        PickerItem(id: "nest2", symbol: "hifispeaker.fill", caption: "Nest 2", kind: "iot", subtitle: "Nest pod"),
+        PickerItem(id: "yale1", symbol: "lock.fill", caption: "Yale 1", kind: "iot", subtitle: "Yale lock"),
+        PickerItem(id: "yale2", symbol: "lock.fill", caption: "Yale 2", kind: "iot", subtitle: "Yale lock"),
+        PickerItem(id: "tv", symbol: "tv", caption: "TV", kind: "iot", subtitle: "house TV"),
+        PickerItem(id: "console", symbol: "gamecontroller", caption: "Console", kind: "iot", subtitle: "game console · LAN OUI only"),
+        PickerItem(id: "wifi", symbol: "wifi", caption: "Wi-Fi", kind: "radio", subtitle: "en1 · Chariot"),
+        PickerItem(id: "ble", symbol: "wave.3.right", caption: "BLE", kind: "radio", subtitle: "Brick Continuity path"),
+        PickerItem(id: "nfc", symbol: "sensor.tag.radiowaves.forward", caption: "NFC", kind: "radio", subtitle: "Wallet / Continuity route only"),
+        PickerItem(id: "usbhub", symbol: "cable.connector", caption: "USB hub", kind: "radio", subtitle: "iPhone@02116000 tree"),
+        PickerItem(id: "qm2", symbol: "wifi.router", caption: "Qm-2", kind: "radio", subtitle: "AirPort Express · en8"),
+        PickerItem(id: "bridge", symbol: "network", caption: "Bridge", kind: "radio", subtitle: "origin_bridge :8798"),
+        PickerItem(id: "iso", symbol: "opticaldisc", caption: "ISO", kind: "image", subtitle: "ISO / USB tools"),
+        PickerItem(id: "osimg", symbol: "server.rack", caption: "OS img", kind: "image", subtitle: "golden / customize / deploy notes"),
+        PickerItem(id: "models", symbol: "cube", caption: "Models", kind: "model", subtitle: "Hugging Face / LM Studio cache"),
+        PickerItem(id: "andslot", symbol: "ellipsis.circle", caption: "and…", kind: "slot", subtitle: "reserved next lane"),
+    ]
+}
+
+final class LogoTile: NSView {
+    let item: PickerItem
+    var on: Bool = false { didSet { applyChrome() } }
+    var icon: NSImageView!
+    var captionLab: NSTextField!
+    var click: (() -> Void)?
+
+    init(item: PickerItem) {
+        self.item = item
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.borderWidth = 1.0
+        translatesAutoresizingMaskIntoConstraints = false
+        icon = symbolView(item.symbol, size: 20)
+        captionLab = lab(item.caption, size: 9, weight: .medium, color: Theme.dim, wrap: true)
+        captionLab.alignment = .center
+        addSubview(icon)
+        addSubview(captionLab)
+        toolTip = item.subtitle
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 72),
+            heightAnchor.constraint(equalToConstant: 68),
+            icon.topAnchor.constraint(equalTo: topAnchor, constant: 7),
+            icon.centerXAnchor.constraint(equalTo: centerXAnchor),
+            captionLab.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 3),
+            captionLab.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            captionLab.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+        ])
+        applyChrome()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:)") }
+
+    func applyChrome() {
+        layer?.backgroundColor = (on ? Theme.accent.withAlphaComponent(0.20) : Theme.inset).cgColor
+        layer?.borderColor = (on ? Theme.accent.cgColor : Theme.stepOff.cgColor)
+        icon.contentTintColor = on ? Theme.accent : Theme.mute
+        captionLab.textColor = on ? Theme.text : Theme.dim
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        click?()
+    }
+}
+
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let ui = PreserveWindow()
 
@@ -157,8 +248,43 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var devicePane: NSView!
     var targetPane: NSView!
     var backupPane: NSView!
-    var babyRadio: NSButton!
-    var brickRadio: NSButton!
+    var logoTiles: [LogoTile] = []
+    var selectedIDs: Set<String> = ["baby"]
+    var lastPhoneUsed: Int64 = 0
+    var lastPhoneFree: Int64 = 0
+    var lastPhoneKnown = false
+    var lastMBPNote = "machines.json not read yet"
+    var lastNestNote = "Nest cam not read yet"
+    var lastKinectNote = "Kinect not read yet"
+    var lastConsoleNote = "console not read yet"
+    var lastWifiNote = "wifi not read yet"
+    var lastUSBHubNote = "usb hub not read yet"
+    var lastQm2Note = "Qm-2 not read yet"
+    var lastBridgeNote = "bridge not read yet"
+    var isoImagePath = ""
+    var isoTargetNode = ""
+    var isoTargetOK = false
+    var isoTargetReason = "no removable USB picked"
+    var cachedISOs: [(String, Int64, String)] = []
+    var cachedModels: [(String, Int64, String)] = []
+    var hfCacheBytes: Int64 = 0
+    var hfCliPath = ""
+    var lmsPath = ""
+    var etcherPresent = false
+    var isoList: NSTextView!
+    var isoTargetList: NSTextView!
+    var isoStatus: NSTextField!
+    var isoImageField: NSTextField!
+    var isoTargetField: NSTextField!
+    var etcherBtn: NSButton!
+    var isoFlashBtn: NSButton!
+    var osCreate: NSTextField!
+    var osCustomize: NSTextField!
+    var osDeploy: NSTextField!
+    var osCatalogView: NSTextView!
+    var hfList: NSTextView!
+    var hfStatus: NSTextField!
+    var andSlotNote: NSTextField!
     var usbBadge: NSTextField!
     var usbDetail: NSTextField!
     var destField: NSTextField!
@@ -172,11 +298,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
     var drivesView: NSTextView!
     var flagsView: NSTextView!
-    var drivePopup: NSPopUpButton!
-    var driveBar: StackBarView!
-    var driveBarCap: NSTextField!
-    var phoneBar: StackBarView!
-    var phoneBarCap: NSTextField!
+    var barsStack: NSStackView!
     var partCamera: NSTextField!
     var partSensors: NSTextField!
     var partStorage: NSTextField!
@@ -283,7 +405,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             stepper.heightAnchor.constraint(equalToConstant: 40),
             card.topAnchor.constraint(equalTo: stepper.bottomAnchor, constant: 12),
             card.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-            card.widthAnchor.constraint(equalToConstant: 420),
+            card.widthAnchor.constraint(equalToConstant: 500),
             card.bottomAnchor.constraint(equalTo: primaryBtn.topAnchor, constant: -14),
             desk.topAnchor.constraint(equalTo: stepper.bottomAnchor, constant: 12),
             desk.leadingAnchor.constraint(equalTo: card.trailingAnchor, constant: 12),
@@ -306,6 +428,8 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         ])
 
         applyStep()
+        refreshLaneInventory()
+        refreshHFModels()
         refreshAll()
         timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             self?.refreshAll()
@@ -383,16 +507,56 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         let v = NSView()
         let title = lab("SELECT DEVICE", size: 16, weight: .semibold, color: Theme.text)
         v.addSubview(title)
-        babyRadio = NSButton(radioButtonWithTitle: "GrokBotBaby     iPhone 7 Plus · A10 checkm8 · default", target: self, action: #selector(pickDevice(_:)))
-        babyRadio.state = .on
-        babyRadio.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        babyRadio.translatesAutoresizingMaskIntoConstraints = false
-        v.addSubview(babyRadio)
-        brickRadio = NSButton(radioButtonWithTitle: "Brick     daily iPhone · Continuity · never flash", target: self, action: #selector(pickDevice(_:)))
-        brickRadio.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        brickRadio.translatesAutoresizingMaskIntoConstraints = false
-        v.addSubview(brickRadio)
-        deviceHint = lab("GrokBotBaby — iPhone9,4 D111AP iOS 15.1. Preserve everything locally. Flash stays locked until linux-gate.json ready.", size: 12, weight: .regular, color: Theme.dim, wrap: true)
+        let how = lab("Logos · click any and all. Orange = selected. Gray = idle. Backup still preserve.py all GrokBotBaby when mux is up.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        v.addSubview(how)
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(scroll)
+        let doc = NSView()
+        doc.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = doc
+
+        let items = householdPicker()
+        logoTiles = items.map { LogoTile(item: $0) }
+        let cols = 5
+        var rows: [NSStackView] = []
+        var i = 0
+        while i < logoTiles.count {
+            let slice = Array(logoTiles[i..<min(i + cols, logoTiles.count)])
+            for tile in slice {
+                tile.on = selectedIDs.contains(tile.item.id)
+                tile.click = { [weak self, id = tile.item.id] in
+                    self?.toggleLogo(id)
+                }
+            }
+            let row = NSStackView(views: slice)
+            row.orientation = .horizontal
+            row.spacing = 6
+            row.alignment = .top
+            row.translatesAutoresizingMaskIntoConstraints = false
+            rows.append(row)
+            i += cols
+        }
+        let grid = NSStackView(views: rows)
+        grid.orientation = .vertical
+        grid.spacing = 6
+        grid.alignment = .leading
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(grid)
+        NSLayoutConstraint.activate([
+            grid.topAnchor.constraint(equalTo: doc.topAnchor),
+            grid.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
+            grid.trailingAnchor.constraint(lessThanOrEqualTo: doc.trailingAnchor),
+            grid.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
+            doc.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+        ])
+
+        deviceHint = lab("GrokBotBaby selected — vault-first backup. Flash stays locked until linux-gate.json ready.", size: 12, weight: .regular, color: Theme.dim, wrap: true)
         v.addSubview(deviceHint)
         usbBadge = lab("USB: probing…", size: 13, weight: .semibold, color: Theme.warn, wrap: true)
         v.addSubview(usbBadge)
@@ -401,18 +565,20 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         NSLayoutConstraint.activate([
             title.topAnchor.constraint(equalTo: v.topAnchor),
             title.leadingAnchor.constraint(equalTo: v.leadingAnchor),
-            babyRadio.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 16),
-            babyRadio.leadingAnchor.constraint(equalTo: v.leadingAnchor),
-            babyRadio.trailingAnchor.constraint(lessThanOrEqualTo: v.trailingAnchor),
-            brickRadio.topAnchor.constraint(equalTo: babyRadio.bottomAnchor, constant: 8),
-            brickRadio.leadingAnchor.constraint(equalTo: v.leadingAnchor),
-            deviceHint.topAnchor.constraint(equalTo: brickRadio.bottomAnchor, constant: 12),
+            how.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 6),
+            how.leadingAnchor.constraint(equalTo: v.leadingAnchor),
+            how.trailingAnchor.constraint(equalTo: v.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: how.bottomAnchor, constant: 8),
+            scroll.leadingAnchor.constraint(equalTo: v.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: v.trailingAnchor),
+            scroll.heightAnchor.constraint(equalToConstant: 290),
+            deviceHint.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 8),
             deviceHint.leadingAnchor.constraint(equalTo: v.leadingAnchor),
             deviceHint.trailingAnchor.constraint(equalTo: v.trailingAnchor),
-            usbBadge.topAnchor.constraint(equalTo: deviceHint.bottomAnchor, constant: 16),
+            usbBadge.topAnchor.constraint(equalTo: deviceHint.bottomAnchor, constant: 10),
             usbBadge.leadingAnchor.constraint(equalTo: v.leadingAnchor),
             usbBadge.trailingAnchor.constraint(equalTo: v.trailingAnchor),
-            usbDetail.topAnchor.constraint(equalTo: usbBadge.bottomAnchor, constant: 8),
+            usbDetail.topAnchor.constraint(equalTo: usbBadge.bottomAnchor, constant: 6),
             usbDetail.leadingAnchor.constraint(equalTo: v.leadingAnchor),
             usbDetail.trailingAnchor.constraint(equalTo: v.trailingAnchor),
         ])
@@ -630,22 +796,117 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
         let h3 = sectionTitle("STORAGE DISTRIBUTION", symbol: "chart.bar.fill")
         doc.addSubview(h3)
-        drivePopup = NSPopUpButton()
-        drivePopup.translatesAutoresizingMaskIntoConstraints = false
-        drivePopup.target = self
-        drivePopup.action = #selector(drivePicked)
-        drivePopup.addItem(withTitle: "MacBookPro - Data")
-        doc.addSubview(drivePopup)
-        driveBar = StackBarView(frame: .zero)
-        driveBar.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(driveBar)
-        driveBarCap = mono("used / free — probing", size: 10.5, color: Theme.dim, wrap: true)
-        doc.addSubview(driveBarCap)
-        phoneBar = StackBarView(frame: .zero)
-        phoneBar.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(phoneBar)
-        phoneBarCap = mono("phone 0 / unknown — mux empty", size: 10.5, color: Theme.dim, wrap: true)
-        doc.addSubview(phoneBarCap)
+        let under = lab("Selected logos drive these bars. Unknown = 0 / unknown. No guessed sizes.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        under.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(under)
+        barsStack = NSStackView()
+        barsStack.orientation = .vertical
+        barsStack.alignment = .leading
+        barsStack.spacing = 10
+        barsStack.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(barsStack)
+
+        let hISO = sectionTitle("ISO / USB TOOLS", symbol: "opticaldisc")
+        doc.addSubview(hISO)
+        let isoHow = lab("Etcher-shaped, local routes only. SELECT IMAGE → SELECT TARGET → FLASH + verify. Never the iPhone, never Internal APFS, never the Data vault, never qbitOS. Phone linux-gate still locks phone flash.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        isoHow.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(isoHow)
+        isoImageField = NSTextField(string: "")
+        isoImageField.placeholderString = kImagesDir + "/<file.iso>"
+        isoImageField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        isoImageField.translatesAutoresizingMaskIntoConstraints = false
+        isoImageField.isEditable = true
+        isoImageField.isBezeled = true
+        isoImageField.bezelStyle = .roundedBezel
+        isoImageField.target = self
+        isoImageField.action = #selector(isoImageTyped)
+        doc.addSubview(isoImageField)
+        let isoBrowse = button("Browse image…", filled: false, action: #selector(browseISO))
+        isoBrowse.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(isoBrowse)
+        let (isoScroll, isoTV) = makeTextBox(88)
+        isoList = isoTV
+        isoList.string = "image library probing…"
+        doc.addSubview(isoScroll)
+        isoTargetField = NSTextField(string: "")
+        isoTargetField.placeholderString = "removable USB node or .img dest — not vault / Internal / iPhone"
+        isoTargetField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        isoTargetField.translatesAutoresizingMaskIntoConstraints = false
+        isoTargetField.isEditable = true
+        isoTargetField.isBezeled = true
+        isoTargetField.bezelStyle = .roundedBezel
+        isoTargetField.target = self
+        isoTargetField.action = #selector(isoTargetTyped)
+        doc.addSubview(isoTargetField)
+        let tgtBrowse = button("Browse dest…", filled: false, action: #selector(browseISODest))
+        tgtBrowse.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(tgtBrowse)
+        let (tgtScroll, tgtTV) = makeTextBox(72)
+        isoTargetList = tgtTV
+        isoTargetList.string = "flash targets probing…"
+        doc.addSubview(tgtScroll)
+        isoStatus = lab("FLASH locked — no removable USB picked.", size: 11, weight: .medium, color: Theme.warn, wrap: true)
+        doc.addSubview(isoStatus)
+        etcherBtn = button("Open balenaEtcher", filled: false, action: #selector(openEtcher))
+        etcherBtn.translatesAutoresizingMaskIntoConstraints = false
+        isoFlashBtn = button("FLASH + verify (local)", filled: true, action: #selector(flashISO))
+        isoFlashBtn.translatesAutoresizingMaskIntoConstraints = false
+        isoFlashBtn.isEnabled = false
+        let isoBtns = NSStackView(views: [etcherBtn, isoFlashBtn])
+        isoBtns.orientation = .horizontal
+        isoBtns.spacing = 8
+        isoBtns.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(isoBtns)
+
+        let hOS = sectionTitle("OS IMAGE MANAGEMENT", symbol: "server.rack")
+        doc.addSubview(hOS)
+        let osHow = lab("Create / Customize / Deploy cards. Notes + ISO/USB route only — not zero-touch wipe. Not ManageEngine. Hardware-independent note is text only.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        osHow.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(osHow)
+        var oc: NSTextField!
+        var oz: NSTextField!
+        var od: NSTextField!
+        let os1 = partCard(symbol: "plus.square", title: "CREATE", body: &oc)
+        let os2 = partCard(symbol: "slider.horizontal.3", title: "CUSTOMIZE", body: &oz)
+        let os3 = partCard(symbol: "shippingbox", title: "DEPLOY", body: &od)
+        osCreate = oc
+        osCustomize = oz
+        osDeploy = od
+        let osCards = NSStackView(views: [os1, os2, os3])
+        osCards.orientation = .horizontal
+        osCards.distribution = .fillEqually
+        osCards.spacing = 8
+        osCards.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(osCards)
+        let (osScroll, osTV) = makeTextBox(96)
+        osCatalogView = osTV
+        osCatalogView.string = "catalog.json probing…"
+        doc.addSubview(osScroll)
+
+        let hHF = sectionTitle("MODELS", symbol: "cube")
+        doc.addSubview(hHF)
+        hfStatus = lab("Hugging Face cache / LM Studio — probing. Will not download.", size: 11, weight: .medium, color: Theme.dim, wrap: true)
+        doc.addSubview(hfStatus)
+        let (hfScroll, hfTV) = makeTextBox(120)
+        hfList = hfTV
+        hfList.string = "local models probing…"
+        doc.addSubview(hfScroll)
+        let hfCopy = button("Copy selected path", filled: false, action: #selector(copyHFPath))
+        hfCopy.translatesAutoresizingMaskIntoConstraints = false
+        let hfOpen = button("Open LM Studio", filled: false, action: #selector(openLMStudio))
+        hfOpen.translatesAutoresizingMaskIntoConstraints = false
+        let hfDir = button("Open HF cache", filled: false, action: #selector(openHFCache))
+        hfDir.translatesAutoresizingMaskIntoConstraints = false
+        let hfBtns = NSStackView(views: [hfCopy, hfOpen, hfDir])
+        hfBtns.orientation = .horizontal
+        hfBtns.spacing = 8
+        hfBtns.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(hfBtns)
+
+        let hAnd = sectionTitle("AND…", symbol: "ellipsis.circle")
+        doc.addSubview(hAnd)
+        andSlotNote = lab("Reserved lane. Tad ended with and — next tool sits here. Empty on purpose.", size: 11, weight: .regular, color: Theme.mute, wrap: true)
+        doc.addSubview(andSlotNote)
 
         let h4 = sectionTitle("FILE + TERMINAL ROUTES", symbol: "terminal")
         doc.addSubview(h4)
@@ -708,24 +969,70 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             parts.heightAnchor.constraint(greaterThanOrEqualToConstant: 88),
             h3.topAnchor.constraint(equalTo: parts.bottomAnchor, constant: 14),
             h3.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            drivePopup.topAnchor.constraint(equalTo: h3.bottomAnchor, constant: 6),
-            drivePopup.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            drivePopup.widthAnchor.constraint(lessThanOrEqualToConstant: 280),
-            driveBar.topAnchor.constraint(equalTo: drivePopup.bottomAnchor, constant: 6),
-            driveBar.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            driveBar.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            driveBar.heightAnchor.constraint(equalToConstant: 18),
-            driveBarCap.topAnchor.constraint(equalTo: driveBar.bottomAnchor, constant: 4),
-            driveBarCap.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            driveBarCap.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            phoneBar.topAnchor.constraint(equalTo: driveBarCap.bottomAnchor, constant: 8),
-            phoneBar.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            phoneBar.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            phoneBar.heightAnchor.constraint(equalToConstant: 18),
-            phoneBarCap.topAnchor.constraint(equalTo: phoneBar.bottomAnchor, constant: 4),
-            phoneBarCap.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
-            phoneBarCap.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            h4.topAnchor.constraint(equalTo: phoneBarCap.bottomAnchor, constant: 14),
+            under.topAnchor.constraint(equalTo: h3.bottomAnchor, constant: 4),
+            under.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            under.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            barsStack.topAnchor.constraint(equalTo: under.bottomAnchor, constant: 8),
+            barsStack.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            barsStack.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hISO.topAnchor.constraint(equalTo: barsStack.bottomAnchor, constant: 14),
+            hISO.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            isoHow.topAnchor.constraint(equalTo: hISO.bottomAnchor, constant: 4),
+            isoHow.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            isoHow.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            isoImageField.topAnchor.constraint(equalTo: isoHow.bottomAnchor, constant: 8),
+            isoImageField.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            isoImageField.trailingAnchor.constraint(equalTo: isoBrowse.leadingAnchor, constant: -8),
+            isoImageField.heightAnchor.constraint(equalToConstant: 26),
+            isoBrowse.centerYAnchor.constraint(equalTo: isoImageField.centerYAnchor),
+            isoBrowse.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            isoBrowse.widthAnchor.constraint(equalToConstant: 128),
+            isoScroll.topAnchor.constraint(equalTo: isoImageField.bottomAnchor, constant: 6),
+            isoScroll.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            isoScroll.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            isoTargetField.topAnchor.constraint(equalTo: isoScroll.bottomAnchor, constant: 8),
+            isoTargetField.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            isoTargetField.trailingAnchor.constraint(equalTo: tgtBrowse.leadingAnchor, constant: -8),
+            isoTargetField.heightAnchor.constraint(equalToConstant: 26),
+            tgtBrowse.centerYAnchor.constraint(equalTo: isoTargetField.centerYAnchor),
+            tgtBrowse.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            tgtBrowse.widthAnchor.constraint(equalToConstant: 128),
+            tgtScroll.topAnchor.constraint(equalTo: isoTargetField.bottomAnchor, constant: 6),
+            tgtScroll.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            tgtScroll.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            isoStatus.topAnchor.constraint(equalTo: tgtScroll.bottomAnchor, constant: 6),
+            isoStatus.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            isoStatus.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            isoBtns.topAnchor.constraint(equalTo: isoStatus.bottomAnchor, constant: 6),
+            isoBtns.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hOS.topAnchor.constraint(equalTo: isoBtns.bottomAnchor, constant: 14),
+            hOS.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            osHow.topAnchor.constraint(equalTo: hOS.bottomAnchor, constant: 4),
+            osHow.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            osHow.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            osCards.topAnchor.constraint(equalTo: osHow.bottomAnchor, constant: 6),
+            osCards.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            osCards.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            osCards.heightAnchor.constraint(greaterThanOrEqualToConstant: 88),
+            osScroll.topAnchor.constraint(equalTo: osCards.bottomAnchor, constant: 6),
+            osScroll.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            osScroll.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hHF.topAnchor.constraint(equalTo: osScroll.bottomAnchor, constant: 14),
+            hHF.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hfStatus.topAnchor.constraint(equalTo: hHF.bottomAnchor, constant: 4),
+            hfStatus.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hfStatus.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hfScroll.topAnchor.constraint(equalTo: hfStatus.bottomAnchor, constant: 6),
+            hfScroll.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hfScroll.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hfBtns.topAnchor.constraint(equalTo: hfScroll.bottomAnchor, constant: 6),
+            hfBtns.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hAnd.topAnchor.constraint(equalTo: hfBtns.bottomAnchor, constant: 14),
+            hAnd.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            andSlotNote.topAnchor.constraint(equalTo: hAnd.bottomAnchor, constant: 4),
+            andSlotNote.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            andSlotNote.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            h4.topAnchor.constraint(equalTo: andSlotNote.bottomAnchor, constant: 14),
             h4.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
             routesStack.topAnchor.constraint(equalTo: h4.bottomAnchor, constant: 6),
             routesStack.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
@@ -791,19 +1098,547 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         }
     }
 
-    @objc func pickDevice(_ sender: NSButton) {
-        if sender == brickRadio {
+    @objc func toggleLogo(_ id: String) {
+        if selectedIDs.contains(id) {
+            if selectedIDs.count == 1 { return }
+            selectedIDs.remove(id)
+        } else {
+            selectedIDs.insert(id)
+        }
+        if selectedIDs.contains("baby") {
+            alias = "GrokBotBaby"
+        } else if selectedIDs.contains("brick") {
             alias = "Brick"
-            babyRadio.state = .off
-            brickRadio.state = .on
-            deviceHint.stringValue = "Brick is the daily Continuity iPhone — preserve only, never flash."
         } else {
             alias = "GrokBotBaby"
-            babyRadio.state = .on
-            brickRadio.state = .off
-            deviceHint.stringValue = "GrokBotBaby — iPhone9,4 D111AP A10 checkm8 iOS 15.1. Preserve everything locally. Flash stays locked until linux-gate.json ready."
         }
+        for tile in logoTiles {
+            tile.on = selectedIDs.contains(tile.item.id)
+        }
+        refreshPickerHint()
         applyParts(phoneUsed: 0, phoneFree: 0, phoneKnown: false)
+        rebuildStorageBars()
+    }
+
+    func refreshPickerHint() {
+        let names = householdPicker().filter { selectedIDs.contains($0.id) }.map { $0.caption }
+        let joined = names.joined(separator: ", ")
+        if selectedIDs.contains("baby") {
+            deviceHint.stringValue = "Selected: \(joined). Vault-first backup is preserve.py all GrokBotBaby when mux is up. Flash stays locked."
+        } else if selectedIDs.contains("brick") {
+            deviceHint.stringValue = "Selected: \(joined). Brick is preserve only, never flash. Vault-first phone path stays GrokBotBaby unless Brick is the only phone."
+        } else {
+            deviceHint.stringValue = "Selected: \(joined). No phone in the set — backup still preserve.py all GrokBotBaby when mux is up. Not blocking on hotspot."
+        }
+    }
+
+    func makeBarRow(title: String, used: Int64, free: Int64, known: Bool, note: String) -> NSView {
+        let box = NSView()
+        box.translatesAutoresizingMaskIntoConstraints = false
+        let name = lab(title, size: 11, weight: .semibold, color: Theme.text)
+        let bar = StackBarView(frame: .zero)
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        bar.unknown = !known
+        bar.used = Double(max(0, used))
+        bar.free = Double(max(0, free))
+        let cap: NSTextField
+        if known {
+            let pct = used + free > 0 ? Int((Double(used) / Double(used + free)) * 100.0) : 0
+            cap = mono("used \(fmtBytes(used)) / free \(fmtBytes(free)) / \(pct)%  ·  \(note)", size: 10.5, color: Theme.dim, wrap: true)
+        } else {
+            cap = mono("used 0 / free 0 — unknown  ·  \(note)", size: 10.5, color: Theme.mute, wrap: true)
+        }
+        box.addSubview(name)
+        box.addSubview(bar)
+        box.addSubview(cap)
+        NSLayoutConstraint.activate([
+            name.topAnchor.constraint(equalTo: box.topAnchor),
+            name.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            name.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            bar.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 4),
+            bar.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            bar.heightAnchor.constraint(equalToConstant: 16),
+            cap.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 3),
+            cap.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            cap.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            cap.bottomAnchor.constraint(equalTo: box.bottomAnchor),
+        ])
+        return box
+    }
+
+    func driveNamed(_ name: String) -> DriveRow? {
+        return lastDrives.first(where: { $0.name == name || $0.mount == name })
+    }
+
+    func rebuildStorageBars() {
+        guard barsStack != nil else { return }
+        for v in barsStack.arrangedSubviews {
+            barsStack.removeArrangedSubview(v)
+            v.removeFromSuperview()
+        }
+        let catalog = householdPicker()
+        let chosen = catalog.filter { selectedIDs.contains($0.id) }
+        if chosen.isEmpty {
+            barsStack.addArrangedSubview(lab("nothing selected", size: 11, weight: .regular, color: Theme.mute))
+            return
+        }
+        for item in chosen {
+            let row = barForItem(item)
+            barsStack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: barsStack.widthAnchor).isActive = true
+        }
+    }
+
+    func barForItem(_ item: PickerItem) -> NSView {
+        switch item.id {
+        case "internal":
+            if let d = driveNamed("Internal") ?? lastDrives.first(where: { $0.mount == "/" }) {
+                return makeBarRow(title: "Internal", used: d.used, free: d.free, known: d.size > 0, note: "\(d.mount) · flagged tight if free < 50 Gi")
+            }
+            return makeBarRow(title: "Internal", used: 0, free: 0, known: false, note: "not mounted")
+        case "mbpvol":
+            if let d = lastDrives.first(where: { $0.mount == "/Volumes/MacBookPro" }) {
+                return makeBarRow(title: "MacBookPro", used: d.used, free: d.free, known: d.size > 0, note: d.mount)
+            }
+            return makeBarRow(title: "MacBookPro", used: 0, free: 0, known: false, note: "volume not mounted")
+        case "vault":
+            if let d = lastDrives.first(where: { $0.mount == "/Volumes/MacBookPro - Data" }) {
+                return makeBarRow(title: "Vault volume", used: d.used, free: d.free, known: d.size > 0, note: "\(d.mount) · dest \(kDefaultVault)")
+            }
+            return makeBarRow(title: "Vault volume", used: 0, free: 0, known: false, note: "MacBookPro - Data not mounted")
+        case "qbitos":
+            if let d = lastDrives.first(where: { $0.mount == "/Volumes/qbitOS" }) {
+                return makeBarRow(title: "qbitOS", used: d.used, free: d.free, known: d.size > 0, note: "lab SSD · not the vault")
+            }
+            return makeBarRow(title: "qbitOS", used: 0, free: 0, known: false, note: "not mounted")
+        case "usbphone", "baby":
+            let known = lastPhoneKnown
+            return makeBarRow(title: item.id == "baby" ? "GrokBotBaby" : "USB iPhone", used: lastPhoneUsed, free: lastPhoneFree, known: known, note: lastMux.isEmpty ? "mux empty · no fs mount" : "mux up")
+        case "brick":
+            return makeBarRow(title: "Brick", used: 0, free: 0, known: false, note: "Continuity daily · size unknown until that phone is on mux")
+        case "mini":
+            if let d = lastDrives.first(where: { $0.mount == "/" }) {
+                return makeBarRow(title: "Mini", used: d.used, free: d.free, known: d.size > 0, note: "tadericsonsMini Internal")
+            }
+            return makeBarRow(title: "Mini", used: 0, free: 0, known: false, note: "tadericsonsMini")
+        case "mbp2019":
+            return makeBarRow(title: "2019 MBP", used: 0, free: 0, known: false, note: lastMBPNote)
+        case "kinect":
+            return makeBarRow(title: "Kinect", used: 0, free: 0, known: false, note: lastKinectNote)
+        case "nestcam":
+            return makeBarRow(title: "Nest cam", used: 0, free: 0, known: false, note: lastNestNote)
+        case "wifi":
+            return makeBarRow(title: "Wi-Fi en1", used: 0, free: 0, known: false, note: lastWifiNote)
+        case "ble":
+            return makeBarRow(title: "BLE", used: 0, free: 0, known: false, note: "Brick Continuity path · no BLE session claimed")
+        case "nfc":
+            return makeBarRow(title: "NFC", used: 0, free: 0, known: false, note: "Wallet / Continuity route only · no session claimed")
+        case "usbhub":
+            return makeBarRow(title: "USB hub", used: 0, free: 0, known: false, note: lastUSBHubNote)
+        case "qm2":
+            return makeBarRow(title: "Qm-2", used: 0, free: 0, known: false, note: lastQm2Note)
+        case "bridge":
+            return makeBarRow(title: "origin_bridge", used: 0, free: 0, known: false, note: lastBridgeNote)
+        case "nest1", "nest2", "yale1", "yale2", "tv", "console":
+            return makeBarRow(title: item.caption, used: 0, free: 0, known: false, note: lastIoTNote(item.id))
+        case "iso":
+            let used = cachedISOs.reduce(Int64(0)) { $0 + $1.1 }
+            return makeBarRow(title: "ISO library", used: used, free: 0, known: !cachedISOs.isEmpty, note: cachedISOs.isEmpty ? "library empty — no size" : "\(cachedISOs.count) file(s) in images/")
+        case "osimg":
+            let present = FileManager.default.fileExists(atPath: kImageCatalog)
+            return makeBarRow(title: "OS catalog", used: 0, free: 0, known: false, note: present ? "catalog.json notes only — no golden ISO" : "catalog.json not written yet")
+        case "models":
+            return makeBarRow(title: "HF cache", used: hfCacheBytes, free: 0, known: hfCacheBytes > 0, note: hfCacheBytes > 0 ? "local hub only — will not download" : "size pending / unknown")
+        case "andslot":
+            return makeBarRow(title: "and…", used: 0, free: 0, known: false, note: "reserved next lane")
+        default:
+            return makeBarRow(title: item.caption, used: 0, free: 0, known: false, note: item.subtitle)
+        }
+    }
+
+    func lastIoTNote(_ id: String) -> String {
+        if id == "console" { return lastConsoleNote }
+        return "household inventory · not labeled in LATEST-lan-devices.json (anonymous device-N, 2026-08-15) · not starting a scan"
+    }
+
+    @objc func isoImageTyped() {
+        isoImagePath = isoImageField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        refreshISOFlashState()
+    }
+
+    @objc func isoTargetTyped() {
+        isoTargetNode = isoTargetField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        classifyISOTarget()
+        refreshISOFlashState()
+    }
+
+    @objc func browseISO() {
+        ensureImagesDir()
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: kImagesDir)
+        panel.allowedFileTypes = ["iso", "img", "dmg", "zip"]
+        panel.prompt = "Select image"
+        panel.beginSheetModal(for: window) { [weak self] resp in
+            guard let self = self, resp == .OK, let url = panel.url else { return }
+            self.isoImagePath = url.path
+            self.isoImageField.stringValue = url.path
+            self.refreshISOFlashState()
+        }
+    }
+
+    @objc func browseISODest() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: kImagesDir)
+        panel.prompt = "Select dest"
+        panel.message = "Removable USB or a disk-image file. Internal / vault / qbitOS / iPhone are refused."
+        panel.beginSheetModal(for: window) { [weak self] resp in
+            guard let self = self, resp == .OK, let url = panel.url else { return }
+            self.isoTargetNode = url.path
+            self.isoTargetField.stringValue = url.path
+            self.classifyISOTarget()
+            self.refreshISOFlashState()
+        }
+    }
+
+    @objc func openEtcher() {
+        if FileManager.default.fileExists(atPath: kEtcherApp) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: kEtcherApp))
+        } else if isoStatus != nil {
+            isoStatus.stringValue = "balenaEtcher.app not in /Applications — route only, not installed."
+            isoStatus.textColor = Theme.warn
+        }
+    }
+
+    @objc func openLMStudio() {
+        if FileManager.default.fileExists(atPath: kLMStudioApp) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: kLMStudioApp))
+        }
+    }
+
+    @objc func openHFCache() {
+        let p = NSHomeDirectory() + "/.cache/huggingface"
+        if FileManager.default.fileExists(atPath: p) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: p))
+        }
+    }
+
+    @objc func copyHFPath() {
+        if let first = cachedModels.first {
+            copyString(first.2)
+            if hfStatus != nil { hfStatus.stringValue = "copied " + first.2 }
+        } else {
+            copyString(NSHomeDirectory() + "/.cache/huggingface/hub")
+        }
+    }
+
+    @objc func flashISO() {
+        classifyISOTarget()
+        refreshISOFlashState()
+        if !isoTargetOK {
+            isoStatus.stringValue = "FLASH refused — " + isoTargetReason
+            isoStatus.textColor = Theme.bad
+            return
+        }
+        let img = isoImagePath
+        if !isSafeImage(img) {
+            isoStatus.stringValue = "FLASH refused — pick a .iso/.img/.dmg/.zip from the image library or Browse."
+            isoStatus.textColor = Theme.bad
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Write image to dest?"
+        alert.informativeText = "IMAGE: \(img)\nDEST: \(isoTargetNode)\n\nLocal ISO/USB only. Will not flash GrokBotBaby or Brick. Will not touch Internal / vault / qbitOS.\ndd is last resort and needs this confirm. Prefer Etcher for USB sticks."
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: "Open Etcher instead")
+        alert.addButton(withTitle: "Confirm local write")
+        alert.addButton(withTitle: "Cancel")
+        let resp = alert.runModal()
+        if resp == .alertFirstButtonReturn {
+            openEtcher()
+            return
+        }
+        if resp != .alertSecondButtonReturn { return }
+        runLocalImageWrite(image: img, dest: isoTargetNode)
+    }
+
+    func runLocalImageWrite(image: String, dest: String) {
+        classifyISOTarget()
+        if !isoTargetOK {
+            isoStatus.stringValue = "FLASH aborted — dest changed / refused: " + isoTargetReason
+            isoStatus.textColor = Theme.bad
+            return
+        }
+        if dest.hasPrefix("/dev/") {
+            isoStatus.stringValue = "last-resort dd not launched as root. Copied dd if=… of=… bs=4m. Open Etcher for a privileged USB write."
+            isoStatus.textColor = Theme.warn
+            copyString("dd if=\(image) of=\(dest) bs=4m")
+            return
+        }
+        var isDir: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: dest, isDirectory: &isDir)
+        let destIsFile = dest.hasSuffix(".img") || dest.hasSuffix(".dmg") || dest.hasSuffix(".iso") || !exists || !isDir.boolValue
+        if destIsFile && dest.hasPrefix(kImagesDir) {
+            let out = Self.run("/usr/bin/hdiutil", ["convert", image, "-format", "UDRW", "-o", dest])
+            isoStatus.stringValue = "hdiutil convert → \(dest)\n" + String(out.prefix(400))
+            isoStatus.textColor = Theme.ok
+            return
+        }
+        isoStatus.stringValue = "FLASH refused — dest is not a removable disk node or images/ disk-image file."
+        isoStatus.textColor = Theme.bad
+    }
+
+    func isSafeImage(_ path: String) -> Bool {
+        let p = (path as NSString).expandingTildeInPath
+        if p.isEmpty { return false }
+        if !FileManager.default.fileExists(atPath: p) { return false }
+        let low = p.lowercased()
+        return low.hasSuffix(".iso") || low.hasSuffix(".img") || low.hasSuffix(".dmg") || low.hasSuffix(".zip")
+    }
+
+    func ensureImagesDir() {
+        try? FileManager.default.createDirectory(atPath: kImagesDir, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: kImageCatalog) {
+            try? defaultOSCatalog().write(toFile: kImageCatalog, atomically: true, encoding: .utf8)
+        }
+    }
+
+    func defaultOSCatalog() -> String {
+        return """
+        {
+          "schema": "fc-preserve-os-catalog-v1",
+          "vault": "\(kImagesDir)",
+          "note": "Inspired OS Deployer UX. Notes + ISO/USB routes only. Not zero-touch wipe. Not ManageEngine.",
+          "images": [],
+          "goldens": [
+            {"id": "mini", "host": "tadericsonsMini", "kind": "apple-silicon-desktop", "iso": null, "drivers": "Apple Silicon. USB DockCaseAx on en8.", "post": "preserve.py, origin_bridge :8798, do not start Elffin.", "deploy": "notes only — will not wipe Mini"},
+            {"id": "mbp2019", "host": "grokpool-laptop", "kind": "intel-mbp-2019", "iso": null, "drivers": "unknown until SSH .89 — not started", "post": "SSH HostName .89 not the stale remap.", "deploy": "notes only — will not wipe 2019 MBP"},
+            {"id": "linux-test", "host": "GrokBotBaby", "kind": "iphone-linux-future", "iso": null, "drivers": "A10 checkm8 / linux-gate.json", "post": "flash locked until gate.ready", "deploy": "phone flash locked"}
+          ],
+          "hw_independent": "Hardware-independent image is a text note only. No sysprep/generalized image is claimed."
+        }
+        """
+    }
+
+    func refreshLaneInventory() {
+        ensureImagesDir()
+        cachedISOs = listImages()
+        etcherPresent = FileManager.default.fileExists(atPath: kEtcherApp)
+        hfCliPath = Self.which("hf") ?? Self.which("huggingface-cli") ?? ""
+        lmsPath = Self.which("lms") ?? ""
+        if isoList != nil { applyISOLists() }
+        if osCatalogView != nil { applyOSCatalog() }
+        refreshISOFlashState()
+    }
+
+    func listImages() -> [(String, Int64, String)] {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: kImagesDir) else { return [] }
+        var out: [(String, Int64, String)] = []
+        for n in names.sorted() {
+            let low = n.lowercased()
+            if !(low.hasSuffix(".iso") || low.hasSuffix(".img") || low.hasSuffix(".dmg") || low.hasSuffix(".zip")) { continue }
+            let path = kImagesDir + "/" + n
+            let sz = (try? fm.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value ?? 0
+            out.append((n, sz, path))
+        }
+        return out
+    }
+
+    func applyISOLists() {
+        if cachedISOs.isEmpty {
+            isoList.string = "library empty — " + kImagesDir + "\nDrop .iso / .img / .dmg / .zip here. No OS installer is in the vault yet. Not scanning Downloads."
+        } else {
+            var s = "LIBRARY  " + kImagesDir + "\n"
+            for (n, sz, path) in cachedISOs {
+                s += "\(n)  \(fmtBytes(sz))  \(path)\n"
+            }
+            isoList.string = s
+        }
+        var t = "FLASH TARGETS (refused unless removable + user-picked)\n"
+        let tgts = listFlashTargets()
+        if tgts.isEmpty {
+            t += "no removable USB right now. qbitOS + MacBookPro Data are USB-attached but Fixed / refused.\n"
+        } else {
+            for line in tgts { t += line + "\n" }
+        }
+        t += "Etcher: " + (etcherPresent ? kEtcherApp : "not installed") + " · hdiutil present · dd last resort + confirm"
+        isoTargetList.string = t
+    }
+
+    func listFlashTargets() -> [String] {
+        let list = Self.run("/usr/sbin/diskutil", ["list", "external"])
+        var lines: [String] = []
+        for row in list.split(separator: "\n") {
+            let s = String(row)
+            if s.contains("/dev/disk") { lines.append(s) }
+        }
+        return lines
+    }
+    func classifyISOTarget() {
+        let raw = isoTargetNode.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dest = (raw as NSString).expandingTildeInPath
+        isoTargetOK = false
+        isoTargetReason = "no dest"
+        if dest.isEmpty {
+            isoTargetReason = "no dest picked"
+            return
+        }
+        let low = dest.lowercased()
+        if low.contains("iphone") || low.contains("grokbotbaby") || low.contains("brick") {
+            isoTargetReason = "refused — phone is never an ISO dest"
+            return
+        }
+        if dest.hasPrefix(kImagesDir) && (low.hasSuffix(".img") || low.hasSuffix(".dmg") || low.hasSuffix(".iso")) {
+            isoTargetOK = true
+            isoTargetReason = "disk-image dest under images/"
+            return
+        }
+        if dest == "/" || dest.hasPrefix("/System") {
+            isoTargetReason = "refused — Internal APFS system"
+            return
+        }
+        if dest.hasPrefix("/Users/") {
+            isoTargetReason = "refused — user home is not a USB dest"
+            return
+        }
+        if dest == "/Volumes/MacBookPro - Data" || (dest.hasPrefix("/Volumes/MacBookPro - Data/") && !dest.hasPrefix(kImagesDir)) {
+            isoTargetReason = "refused — Data vault is not a USB dest"
+            return
+        }
+        if dest == "/Volumes/qbitOS" || dest.hasPrefix("/Volumes/qbitOS/") {
+            isoTargetReason = "refused — qbitOS lab SSD is not a USB dest"
+            return
+        }
+        if dest == "/Volumes/MacBookPro" || dest.hasPrefix("/Volumes/MacBookPro/") {
+            isoTargetReason = "refused — MacBookPro volume is not a USB dest"
+            return
+        }
+        if dest.hasPrefix("/dev/disk") {
+            let info = Self.run("/usr/sbin/diskutil", ["info", dest])
+            if info.contains("APPLE SSD") || info.contains("Device Location:           Internal") {
+                isoTargetReason = "refused — Internal APFS system"
+                return
+            }
+            if info.contains("qbitOS") || info.contains("MacBookPro") || info.contains("Macintosh HD") {
+                isoTargetReason = "refused — vault / lab / system disk"
+                return
+            }
+            if info.contains("Removable Media:           Yes") {
+                isoTargetOK = true
+                isoTargetReason = "removable USB node " + dest
+                return
+            }
+            isoTargetReason = "refused — " + dest + " is not Removable Media (Fixed USB SSDs stay locked)"
+            return
+        }
+        isoTargetReason = "refused — dest is not a removable USB node or images/ disk-image file"
+    }
+
+    func refreshISOFlashState() {
+        classifyISOTarget()
+        let imgOK = isSafeImage(isoImagePath)
+        let ready = imgOK && isoTargetOK
+        if isoFlashBtn != nil { isoFlashBtn.isEnabled = ready }
+        if isoStatus == nil { return }
+        if ready {
+            isoStatus.stringValue = "FLASH ready — image and removable dest accepted. Phone flash still locked."
+            isoStatus.textColor = Theme.ok
+        } else if !imgOK && isoTargetNode.isEmpty {
+            isoStatus.stringValue = "FLASH locked — pick an image and a removable dest. Etcher route available. Phone linux-gate still locks phone flash."
+            isoStatus.textColor = Theme.warn
+        } else {
+            isoStatus.stringValue = "FLASH locked — image " + (imgOK ? "ok" : "missing") + " · dest " + isoTargetReason
+            isoStatus.textColor = Theme.warn
+        }
+        if etcherBtn != nil { etcherBtn.isEnabled = FileManager.default.fileExists(atPath: kEtcherApp) }
+    }
+
+    func applyOSCatalog() {
+        ensureImagesDir()
+        osCreate.stringValue = "Golden notes for Mini / 2019 MBP / future linux-test. No ISO in the library yet. Will not invent a golden."
+        osCustomize.stringValue = "Driver notes only. Mini: Apple Silicon. 2019 MBP: unknown until SSH .89 (not started). Baby: linux-gate locked."
+        osDeploy.stringValue = "Deploy = notes + chosen ISO/USB route. Not zero-touch wipe. Phone flash locked."
+        if let txt = try? String(contentsOfFile: kImageCatalog, encoding: .utf8) {
+            osCatalogView.string = txt
+        } else {
+            osCatalogView.string = "catalog.json missing — will write default notes on first ensure."
+        }
+    }
+
+    func refreshHFModels() {
+        let hub = NSHomeDirectory() + "/.cache/huggingface/hub"
+        let lms = NSHomeDirectory() + "/.lmstudio/models"
+        var rows: [(String, Int64, String)] = []
+        let fm = FileManager.default
+        if let names = try? fm.contentsOfDirectory(atPath: hub) {
+            for n in names.sorted() where n.hasPrefix("models--") {
+                let path = hub + "/" + n
+                let pretty = n.replacingOccurrences(of: "models--", with: "").replacingOccurrences(of: "--", with: "/")
+                rows.append((pretty, 0, path))
+            }
+        }
+        if let names = try? fm.contentsOfDirectory(atPath: lms) {
+            for n in names.sorted() {
+                let path = lms + "/" + n
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
+                    rows.append(("LM Studio/" + n, 0, path))
+                }
+            }
+        }
+        cachedModels = rows
+        applyHFList()
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            var sized: [(String, Int64, String)] = []
+            var cache: Int64 = 0
+            for (n, _, path) in rows {
+                let du = PreserveWindow.run("/usr/bin/du", ["-sk", path])
+                let kib = du.split(whereSeparator: { $0.isWhitespace }).first.flatMap { Int64($0) } ?? 0
+                let bytes = kib * 1024
+                cache += bytes
+                sized.append((n, bytes, path))
+            }
+            DispatchQueue.main.async {
+                self.cachedModels = sized
+                self.hfCacheBytes = cache
+                self.applyHFList()
+            }
+        }
+    }
+
+    func applyHFList() {
+        if hfList == nil { return }
+        let hubOK = FileManager.default.fileExists(atPath: NSHomeDirectory() + "/.cache/huggingface")
+        let lmsDir = NSHomeDirectory() + "/.lmstudio/models"
+        let lmsEmpty: Bool
+        if let n = try? FileManager.default.contentsOfDirectory(atPath: lmsDir) {
+            lmsEmpty = n.isEmpty
+        } else { lmsEmpty = true }
+        let cli = hfCliPath.isEmpty ? "hf / huggingface-cli not on PATH · route: hf download <repo>" : hfCliPath
+        let lmsbin = lmsPath.isEmpty ? "lms not on PATH" : lmsPath
+        let app = FileManager.default.fileExists(atPath: kLMStudioApp) ? "app present" : "app missing"
+        let cacheTxt = hfCacheBytes > 0 ? fmtBytes(hfCacheBytes) : (hubOK ? "size pending" : "missing")
+        hfStatus.stringValue = "HF cache " + cacheTxt + "  ·  " + cli + "  ·  LM Studio " + app + "  ·  " + lmsbin + ". Will not download. Will not start a GPU host."
+        if cachedModels.isEmpty {
+            hfList.string = "no local HF hub models found. LM Studio models dir " + (lmsEmpty ? "empty" : "present") + "."
+            return
+        }
+        var s = "NAME                                      SIZE     PATH\n"
+        for (n, sz, path) in cachedModels {
+            let name = n.padding(toLength: 42, withPad: " ", startingAt: 0)
+            let sizeTxt = sz > 0 ? fmtBytes(sz) : "unknown"
+            s += "\(name) \(padR(sizeTxt, 7))  \(path)\n"
+        }
+        hfList.string = s
     }
 
     @objc func goBack() {
@@ -873,11 +1708,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     @objc func drivePicked() {
-        guard let title = drivePopup.selectedItem?.title else { return }
-        if let row = lastDrives.first(where: { $0.name == title || $0.mount == title }) {
-            selectedMount = row.mount
-            applyDriveBar(row)
-        }
+        rebuildStorageBars()
     }
 
     @objc func openMotion() {
@@ -963,6 +1794,14 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         var vaultExists: Bool
         var liveJpg: Bool
         var afcUp: Bool
+        var mbpNote: String
+        var nestNote: String
+        var kinectNote: String
+        var consoleNote: String
+        var wifiNote: String
+        var usbHubNote: String
+        var qm2Note: String
+        var bridgeNote: String
     }
 
     func collectSnap() -> Snap {
@@ -972,6 +1811,12 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         let usbPhone = ioreg.range(of: "iPhone", options: .caseInsensitive) != nil
         let en9 = Self.run("/sbin/ifconfig", ["en9"])
         let en9Up = en9.contains("status: active")
+        let en1 = Self.run("/sbin/ifconfig", ["en1"])
+        let en1Up = en1.contains("status: active")
+        let en8 = Self.run("/sbin/ifconfig", ["en8"])
+        let en8Up = en8.contains("status: active")
+        let labNetPresent = en8.contains("10.42.")
+        let usbLoc = ioreg.contains("iPhone@02116000")
         let df = Self.run("/bin/df", ["-P", "-k"])
         let mount = Self.run("/sbin/mount", [])
         let dlist = Self.run("/usr/sbin/diskutil", ["list"])
@@ -1003,11 +1848,14 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         let latest = self.latestStampPath()
         let vaultExists = FileManager.default.fileExists(atPath: kDefaultVault)
         let liveJpg = FileManager.default.fileExists(atPath: "/tmp/live.jpg")
+        let extra = Self.householdNotes(en1: en1, en1Up: en1Up, en8: en8, en8Up: en8Up, labNet: labNetPresent, usbLoc: usbLoc, bridgeCode: bridgeCode, ioreg: ioreg)
         return Snap(
             mux: mux, usbPhone: usbPhone, en9Up: en9Up, drives: drives, diskutilHead: diskHead,
             tokenPresent: tokenPresent, pageCode: pageCode, blochCode: blochCode, bridgeCode: bridgeCode,
             phoneUsed: phoneUsed, phoneFree: phoneFree, phoneKnown: phoneKnown, tools: tools,
-            latestStamp: latest, vaultExists: vaultExists, liveJpg: liveJpg, afcUp: false
+            latestStamp: latest, vaultExists: vaultExists, liveJpg: liveJpg, afcUp: false,
+            mbpNote: extra.mbp, nestNote: extra.nest, kinectNote: extra.kinect, consoleNote: extra.console,
+            wifiNote: extra.wifi, usbHubNote: extra.usbhub, qm2Note: extra.qm2, bridgeNote: extra.bridge
         )
     }
 
@@ -1077,53 +1925,30 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         flagsView.string = flags.map { "• \($0)" }.joined(separator: "\n")
         flagsView.textColor = flags.contains(where: { $0.contains("Hotspot") || $0.contains("missing") || $0.contains("refused") }) ? Theme.bad : Theme.warn
 
-        let keep = selectedMount
-        drivePopup.removeAllItems()
-        for d in s.drives { drivePopup.addItem(withTitle: d.name) }
-        if let idx = s.drives.firstIndex(where: { $0.mount == keep }) {
-            drivePopup.selectItem(at: idx)
-            applyDriveBar(s.drives[idx])
-        } else if let vault = s.drives.first(where: { $0.mount == "/Volumes/MacBookPro - Data" }) {
+        if let vault = s.drives.first(where: { $0.mount == "/Volumes/MacBookPro - Data" }) {
             selectedMount = vault.mount
-            if let idx = s.drives.firstIndex(where: { $0.mount == vault.mount }) { drivePopup.selectItem(at: idx) }
-            applyDriveBar(vault)
-        } else if let first = s.drives.first {
-            selectedMount = first.mount
-            applyDriveBar(first)
         }
-
+        lastPhoneUsed = s.phoneUsed
+        lastPhoneFree = s.phoneFree
+        lastPhoneKnown = s.phoneKnown
+        lastMBPNote = s.mbpNote
+        lastNestNote = s.nestNote
+        lastKinectNote = s.kinectNote
+        lastConsoleNote = s.consoleNote
+        lastWifiNote = s.wifiNote
+        lastUSBHubNote = s.usbHubNote
+        lastQm2Note = s.qm2Note
+        lastBridgeNote = s.bridgeNote
+        for tile in logoTiles {
+            tile.toolTip = tile.item.subtitle + " · " + Self.tileStatus(id: tile.item.id, snap: s)
+        }
         applyParts(phoneUsed: s.phoneUsed, phoneFree: s.phoneFree, phoneKnown: s.phoneKnown)
-        applyPhoneBar(used: s.phoneUsed, free: s.phoneFree, known: s.phoneKnown, mux: s.mux)
+        rebuildStorageBars()
+        if isoList != nil { applyISOLists() }
         rebuildRoutes(s)
         applyMotion(s)
     }
 
-    func applyDriveBar(_ d: DriveRow) {
-        driveBar.unknown = d.size <= 0 && d.used <= 0 && d.free <= 0
-        driveBar.used = Double(d.used)
-        driveBar.free = Double(d.free)
-        driveBar.needsDisplay = true
-        if driveBar.unknown {
-            driveBarCap.stringValue = "\(d.name)  used 0 / free 0 — unknown"
-        } else {
-            driveBarCap.stringValue = "\(d.name)  used \(fmtBytes(d.used)) / free \(fmtBytes(d.free)) / \(d.pct)%   \(d.mount)"
-        }
-    }
-
-    func applyPhoneBar(used: Int64, free: Int64, known: Bool, mux: [String]) {
-        phoneBar.unknown = !known
-        phoneBar.used = Double(used)
-        phoneBar.free = Double(free)
-        phoneBar.needsDisplay = true
-        if !mux.isEmpty && known {
-            let pct = used + free > 0 ? Int((Double(used) / Double(used + free)) * 100.0) : 0
-            phoneBarCap.stringValue = "phone  used \(fmtBytes(used)) / free \(fmtBytes(free)) / \(pct)%  (mux up)"
-        } else if !mux.isEmpty {
-            phoneBarCap.stringValue = "phone  used 0 / free 0 — capacity keys unknown (mux up, ideviceinfo empty)"
-        } else {
-            phoneBarCap.stringValue = "phone  used 0 / free 0 — unknown (mux empty)"
-        }
-    }
 
     func applyParts(phoneUsed: Int64, phoneFree: Int64, phoneKnown: Bool) {
         if alias == "Brick" {
@@ -1405,6 +2230,123 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         let f = ISO8601DateFormatter()
         f.timeZone = TimeZone(identifier: "America/Los_Angeles")
         return f.string(from: Date())
+    }
+
+    struct HouseNotes {
+        var mbp: String
+        var nest: String
+        var kinect: String
+        var console: String
+        var wifi: String
+        var usbhub: String
+        var qm2: String
+        var bridge: String
+    }
+
+    static func scrubLaptopIP(_ s: String) -> String {
+        return s.replacingOccurrences(of: "192.168.0.104", with: ".89")
+    }
+
+    static func jsonFile(_ path: String) -> [String: Any]? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    static func householdNotes(en1: String, en1Up: Bool, en8: String, en8Up: Bool, labNet: Bool, usbLoc: Bool, bridgeCode: String, ioreg: String) -> HouseNotes {
+        let home = NSHomeDirectory()
+        var mbp = "2019 MBP not in machines.json · SSH not started"
+        if let obj = jsonFile(home + "/.grok/pool/hotpipe/machines.json"), let hosts = obj["hosts"] as? [[String: Any]] {
+            if let h = hosts.first(where: { ($0["id"] as? String) == "grokpool-laptop" }) {
+                let up = h["up"] as? Bool ?? false
+                let via = scrubLaptopIP(h["via"] as? String ?? "")
+                let err = h["err"] as? String ?? ""
+                mbp = "machines.json grokpool-laptop · 2019-mbp · via \(via) · \(up ? "up" : "peer down") · \(err) · SSH not started"
+            }
+        }
+        let arp = run("/usr/sbin/arp", ["-an"])
+        if arp.contains("192.168.0.89") {
+            mbp += " · arp cache has .89"
+        }
+
+        var nest = "old Nest camera · last file missing"
+        if let obj = jsonFile(home + "/.panda/mg-governance/LATEST-nest-cam.json") {
+            let seen = obj["seen"] as? Bool ?? false
+            let stamp = obj["stamp_utc"] as? String ?? "?"
+            let model = obj["model"] as? String ?? "Nest"
+            nest = "\(model) · seen \(seen) · stamp \(stamp) · not live"
+        }
+
+        var kinect = "leftover Xbox Kinect · USB dark"
+        if let obj = jsonFile(home + "/.grok/pool/hotpipe/cams.json"), let k = obj["kinect"] as? [String: Any] {
+            let honest = (k["honest"] as? String) ?? "Kinect USB dark"
+            kinect = honest
+        } else if ioreg.range(of: "Kinect", options: .caseInsensitive) != nil || ioreg.contains("NUI") {
+            kinect = "Kinect/NUI string present in IOUSB"
+        } else {
+            kinect = "leftover Xbox Kinect · not on USB now (cams.json / IOUSB dark)"
+        }
+
+        var console = "game console · not labeled on LAN snapshot"
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: home + "/.panda/mg-governance/LATEST-lan-devices.json")),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let devices = obj["devices"] as? [[String: Any]] {
+            let stamp = obj["stamp_utc"] as? String ?? "?"
+            if let n = devices.first(where: { (($0["mac"] as? String) ?? "").lowercased().hasPrefix("94:8e:6d") }) {
+                let ip = n["ip"] as? String ?? "?"
+                let ping = n["ping_alive"] as? Bool ?? false
+                console = "Nintendo OUI 94:8e:6d in LATEST-lan-devices.json \(stamp) · \(ip) · ping \(ping) · not in a new scan"
+            } else {
+                console = "no Nintendo OUI in LATEST-lan-devices.json \(stamp) · household console not identified"
+            }
+        }
+
+        var en1ip = ""
+        for line in en1.split(separator: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("inet ") && !t.contains("inet6") {
+                en1ip = t.replacingOccurrences(of: "inet ", with: "").components(separatedBy: " ").first ?? ""
+            }
+        }
+        let wifi = en1Up ? "en1 up · Chariot house wifi · \(en1ip.isEmpty ? "ip unknown" : "this Mini \(en1ip)") · SSID not printed" : "en1 down · Chariot path not associated"
+
+        let usbhub = usbLoc ? "USB2 hub tree · iPhone@02116000 present" : "iPhone@02116000 not in IOUSB right now"
+
+        var qm2 = "AirPort Express Qm-2 · en8 "
+        if !en8Up {
+            qm2 += "down · lab gateway not assigned"
+        } else if labNet {
+            qm2 += "up · lab 10.42 prefix present"
+        } else {
+            qm2 += "up · link-local only · lab gateway 10.42 not assigned"
+        }
+
+        let bridgeUp = bridgeCode != "000" && !bridgeCode.isEmpty
+        let bridge = bridgeUp ? "origin_bridge :8798 up (gated, token not printed)" : "origin_bridge :8798 down"
+
+        return HouseNotes(mbp: mbp, nest: nest, kinect: kinect, console: console, wifi: wifi, usbhub: usbhub, qm2: qm2, bridge: bridge)
+    }
+
+    static func tileStatus(id: String, snap: Snap) -> String {
+        switch id {
+        case "baby": return snap.mux.isEmpty ? "mux empty" : "mux up"
+        case "brick": return "Continuity · not on mux"
+        case "mini": return "this host"
+        case "mbp2019": return snap.mbpNote
+        case "kinect": return snap.kinectNote
+        case "nestcam": return snap.nestNote
+        case "wifi": return snap.wifiNote
+        case "usbhub": return snap.usbHubNote
+        case "qm2": return snap.qm2Note
+        case "bridge": return snap.bridgeNote
+        case "console": return snap.consoleNote
+        case "ble": return "Brick path · no session claimed"
+        case "nfc": return "Wallet/Continuity route only · no session"
+        case "iso": return "ISO / USB tools"
+        case "osimg": return "OS image notes"
+        case "models": return "HF / LM Studio"
+        case "andslot": return "reserved"
+        default: return ""
+        }
     }
 
     static func run(_ path: String, _ args: [String]) -> String {
