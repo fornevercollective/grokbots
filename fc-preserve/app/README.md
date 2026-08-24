@@ -1,10 +1,16 @@
 # FC-Preserve.app
 
-Native **AppKit** 3-step (not Electron, not SwiftUI, not balenaEtcher).
+Native **AppKit** desk + 3-step (not Electron, not SwiftUI, not balenaEtcher).
 
-1. **SELECT DEVICE** — GrokBotBaby (iPhone 7 Plus, default) or Brick (daily, never flash). Live USB via `idevice_id -l` / `preserve.py probe`.
-2. **SELECT TARGET** — default `/Volumes/MacBookPro - Data/FC-Preserve`. Refuses `~/Documents` (Internal too tight) and `/Volumes/qbitOS` (lab SSD, not the vault).
-3. **BACKUP + verify** — `python3 fc-preserve/preserve.py all <alias>`. Flash stays locked.
+Dark chrome stays: **SELECT DEVICE → SELECT TARGET → BACKUP + verify**.
+
+The right **desk** pane is live inventory + tether:
+
+1. **ALL PLUGGED DRIVES** — `diskutil list` + `df` (Internal, MacBookPro, MacBookPro - Data, qbitOS, USB phones, other mounts). Flags capacity / hotspot / mux / dest.
+2. **PARTS** — camera, sensors, storage, unique IDs (UDID + serial). Never IMEI or Find My.
+3. **STORAGE DISTRIBUTION** — used/free bar for the selected volume and the phone (honest 0 if mux empty).
+4. **FILE + TERMINAL ROUTES** — vault, extract/, catalog/, hashes, plus idevice_*/ifuse/AFC/pymobiledevice3/`preserve.py`/ssh. Icon + path + copy.
+5. **MOTION / TETHER** — https://live.ugrad.ai/motion, local Bloch viewer `:8793` status only (does not start Elffin), token-file present / page reachable / ingest up. Capture button only when mux + `idevicescreenshot` are real.
 
 ```bash
 ./build.sh

@@ -12,7 +12,7 @@ A customizable fornevercollective version of:
 
 Not a fork. No Electron, no SwiftUI, no Intune. CLI + JSON vault. Stdlib Python + `idevicebackup2` / `adb`.
 
-Native **AppKit** 3-step lives in `app/` and builds `dist/FC-Preserve.app` (`ai.qbitos.fc-preserve`). Flash stays locked.
+Native **AppKit** 3-step + inventory desk lives in `app/` and builds `dist/FC-Preserve.app` (`ai.qbitos.fc-preserve`). The desk lists drives, parts, storage bars, tool routes, and the live.ugrad.ai/motion tether. Flash stays locked.
 
 Default target: **GrokBotBaby** — preserve every byte locally before flashing a linux flavor for testing.
 

@@ -15,6 +15,8 @@ echo "swiftc $SRC/main.swift -> $APP"
   -sdk "$SDK" \
   -target "${ARCH}-apple-macosx13.0" \
   -O \
+  -framework Cocoa \
+  -framework Foundation \
   -o "$APP/Contents/MacOS/FC-Preserve" \
   "$SRC/main.swift"
 chmod +x "$APP/Contents/MacOS/FC-Preserve"

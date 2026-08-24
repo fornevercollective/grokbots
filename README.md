@@ -24,7 +24,7 @@ python3 fc-preserve/preserve.py --help
 
 CLI: `scripts/fcs` → `python3 fc-preserve/preserve.py`.
 
-Native AppKit 3-step (not Electron, not SwiftUI, not Etcher):
+Native AppKit 3-step + inventory/tether desk (not Electron, not SwiftUI, not Etcher):
 
 ```bash
 open dist/FC-Preserve.app
