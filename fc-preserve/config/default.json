@@ -1,0 +1,102 @@
+{
+  "version": "0.1.0",
+  "vault_root": "/Volumes/MacBookPro - Data/FC-Preserve",
+  "default_device": "GrokBotBaby",
+  "operator": "fornevercollective",
+  "devices": {
+    "GrokBotBaby": {
+      "aliases": ["grokbotbaby", "baby", "botbaby", "gbb"],
+      "role": "linux-test-phone",
+      "expected_platform": "auto",
+      "linux_flavor": "postmarketos",
+      "notes": "Dedicated Grok bot phone. Preserve everything locally before flashing a linux flavor for testing.",
+      "preserve": {
+        "encrypted_ios": true,
+        "include_media": true,
+        "include_app_containers": true,
+        "include_sdcard": true
+      }
+    },
+    "Brick": {
+      "aliases": ["brick", "iphone", "continuity"],
+      "role": "daily-driver",
+      "expected_platform": "ios",
+      "linux_flavor": null,
+      "notes": "Continuity Camera body. Do not flash. Preserve only."
+    }
+  },
+  "domains": {
+    "ios": [
+      {"id": "identity", "required": true, "paths": ["Info.plist", "Manifest.plist", "Status.plist"]},
+      {"id": "manifest", "required": true, "paths": ["Manifest.db"]},
+      {"id": "messages", "required": true, "domain": "HomeDomain", "relative": "Library/SMS/sms.db"},
+      {"id": "contacts", "required": true, "domain": "HomeDomain", "relative": "Library/AddressBook/AddressBook.sqlitedb"},
+      {"id": "notes", "required": false, "domain": "HomeDomain", "relative": "Library/Notes/notes.sqlite"},
+      {"id": "notes_store", "required": false, "domain": "AppDomainGroup-group.com.apple.notes", "relative": "NoteStore.sqlite"},
+      {"id": "calls", "required": false, "domain": "HomeDomain", "relative": "Library/CallHistoryDB/CallHistory.storedata"},
+      {"id": "voicemail", "required": false, "domain": "HomeDomain", "relative": "Library/Voicemail/voicemail.db"},
+      {"id": "safari", "required": false, "domain": "HomeDomain", "relative": "Library/Safari/History.db"},
+      {"id": "calendar", "required": false, "domain": "HomeDomain", "relative": "Library/Calendar/Calendar.sqlitedb"},
+      {"id": "photos", "required": true, "domain": "CameraRollDomain", "glob": "*.{jpg,jpeg,png,heic,heif,mov,mp4,dng}"},
+      {"id": "whatsapp", "required": false, "domain_like": "%whatsapp%", "relative_like": "%ChatStorage.sqlite"}
+    ],
+    "android": [
+      {"id": "identity", "required": true, "cmd": "getprop"},
+      {"id": "packages", "required": true, "cmd": "pm list packages -f"},
+      {"id": "packages_third_party", "required": true, "cmd": "pm list packages -3"},
+      {"id": "accounts", "required": false, "cmd": "dumpsys account"},
+      {"id": "wifi", "required": false, "cmd": "dumpsys wifi"},
+      {"id": "telephony", "required": false, "cmd": "dumpsys telephony.registry"},
+      {"id": "sdcard", "required": true, "pull": "/sdcard"}
+    ]
+  },
+  "linux_flavors": {
+    "postmarketos": {
+      "name": "postmarketOS",
+      "url": "https://wiki.postmarketos.org/",
+      "platforms": ["android"],
+      "wipe": true,
+      "notes": "Mainline-kernel Linux for supported Android devices (Pixels, OnePlus, etc.). Flashing wipes userdata."
+    },
+    "ubuntu-touch": {
+      "name": "Ubuntu Touch (UBports)",
+      "url": "https://devices.ubuntu-touch.io/",
+      "platforms": ["android"],
+      "wipe": true,
+      "notes": "Halium-based. Check device port status before flashing."
+    },
+    "droidian": {
+      "name": "Droidian",
+      "url": "https://droidian.org/",
+      "platforms": ["android"],
+      "wipe": true,
+      "notes": "Debian + GNOME/Phosh on Halium."
+    },
+    "mobian": {
+      "name": "Mobian",
+      "url": "https://mobian-project.org/",
+      "platforms": ["linux-phone"],
+      "wipe": true,
+      "notes": "Debian for PinePhone / Librem 5 class hardware, not typical Android SoCs."
+    },
+    "grapheneos": {
+      "name": "GrapheneOS",
+      "url": "https://grapheneos.org/",
+      "platforms": ["android"],
+      "wipe": true,
+      "notes": "Hardened Android, not a GNU/Linux userspace. Pixel-only."
+    },
+    "project-sandcastle": {
+      "name": "Project Sandcastle / linux-on-iphone",
+      "url": "https://projectsandcastle.org/",
+      "platforms": ["ios"],
+      "wipe": false,
+      "notes": "Experimental Linux on a few A-series iPhones. Dual-boot-ish, not a daily OS. Do not treat as a supported flavor."
+    }
+  },
+  "gate": {
+    "required_extract_ids": ["identity", "manifest", "messages", "contacts", "photos", "packages"],
+    "min_backup_bytes": 1024,
+    "refuse_flash_without_hashes": true
+  }
+}

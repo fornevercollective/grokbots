@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# grokbots · fcs — first tool: fc-preserve
+# Retarget of the Mini media-suite dispatcher to this repo only.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PRESERVE="$ROOT/fc-preserve/preserve.py"
+
+usage() {
+  cat <<EOF
+fcs — grokbots tools CLI
+First tool: fc-preserve (SELECT DEVICE → SELECT TARGET → BACKUP+verify)
+
+  fcs preserve                 # probe USB
+  fcs preserve doctor
+  fcs preserve devices
+  fcs preserve all GrokBotBaby
+  fcs preserve backup Brick    # daily iPhone — preserve only, never flash
+  fcs preserve linux GrokBotBaby  # flash notes only if linux-gate ready:true
+
+Direct:
+  python3 $ROOT/fc-preserve/preserve.py --help
+
+Vault: /Volumes/MacBookPro - Data/FC-Preserve
+Repo:  $ROOT
+EOF
+}
+
+if [[ $# -eq 0 || "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
+  usage
+  exit 0
+fi
+
+cmd="$1"
+shift || true
+case "$cmd" in
+  preserve|etcher|fc-preserve|iphone-backup)
+    if [[ ! -f "$PRESERVE" ]]; then
+      echo "error: missing $PRESERVE" >&2
+      exit 1
+    fi
+    if [[ $# -eq 0 ]]; then
+      exec python3 "$PRESERVE" probe
+    fi
+    exec python3 "$PRESERVE" "$@"
+    ;;
+  doctor)
+    exec python3 "$PRESERVE" doctor "$@"
+    ;;
+  *)
+    echo "unknown command: $cmd (this seat currently ships fc-preserve)" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
