@@ -1,0 +1,15 @@
+[package]
+name = "fc-preserve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI for the FC-Preserve walker/sitter. Binary name: fc-preserve."
+
+[[bin]]
+name = "fc-preserve"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+fc-preserve-core = { path = "../fc-preserve-core" }
+serde_json = "1"

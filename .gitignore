@@ -9,3 +9,6 @@ vaults/
 stamps/
 *.log
 preserve.log
+/target/
+**/*.rs.bk
+crates/**/target/

@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/fc-preserve-core",
+    "crates/fc-preserve",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/fornevercollective/grokbots"
