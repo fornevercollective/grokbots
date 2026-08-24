@@ -1,5 +1,6 @@
 import Cocoa
 import Foundation
+import UniformTypeIdentifiers
 
 let kPreservePy = "/Volumes/qbitOS/00.dev/grokbotsGH/fc-preserve/preserve.py"
 let kDefaultVault = "/Volumes/MacBookPro - Data/FC-Preserve"
@@ -14,6 +15,10 @@ let kWaiterNeedle = "fc-preserve-wait.sh"
 let kMotionURL = "https://live.ugrad.ai/motion"
 let kBlochURL = "http://127.0.0.1:8793"
 let kBridgeURL = "http://127.0.0.1:8798"
+let kHotpipe = NSHomeDirectory() + "/.grok/pool/hotpipe"
+let kSeatJSON = kHotpipe + "/fc-preserve-seat.json"
+let kPhoneTrack = NSHomeDirectory() + "/.grok/scripts/qbit-phone-track"
+let kSessionJSON = kHotpipe + "/fc-preserve-session.json"
 let kTokenPath = NSHomeDirectory() + "/.machines/hub.token"
 let kPhotoLibraryFloor: Int64 = 300 * 1024 * 1024 * 1024
 let kInternalFreeFloor: Int64 = 50 * 1024 * 1024 * 1024
@@ -170,6 +175,43 @@ func householdPicker() -> [PickerItem] {
     ]
 }
 
+struct DeviceGroup {
+    var title: String
+    var ids: [String]
+}
+
+func deviceGroups() -> [DeviceGroup] {
+    return [
+        DeviceGroup(title: "Phones", ids: ["baby", "brick"]),
+        DeviceGroup(title: "Computers", ids: ["mini", "mbp2019"]),
+        DeviceGroup(title: "Storage", ids: ["internal", "mbpvol", "vault", "qbitos", "usbphone"]),
+        DeviceGroup(title: "Radios", ids: ["wifi", "ble", "nfc"]),
+        DeviceGroup(title: "Hubs", ids: ["usbhub", "qm2", "bridge"]),
+        DeviceGroup(title: "IoT/Cameras", ids: ["kinect", "nestcam", "nest1", "nest2", "yale1", "yale2", "tv", "console"]),
+        DeviceGroup(title: "Images/Models", ids: ["iso", "osimg", "models", "andslot"]),
+    ]
+}
+
+func groupTitle(for id: String) -> String {
+    for g in deviceGroups() where g.ids.contains(id) { return g.title }
+    return "Other"
+}
+
+func genericIcon(kind: String) -> NSImage {
+    if #available(macOS 11.0, *) {
+        let ut: UTType
+        switch kind {
+        case "image": ut = .jpeg
+        case "video": ut = .mpeg4Movie
+        case "folder": ut = .folder
+        case "phone": ut = .folder
+        default: ut = .item
+        }
+        return NSWorkspace.shared.icon(for: ut)
+    }
+    return NSWorkspace.shared.icon(forFileType: kind == "folder" ? "public.folder" : "public.item")
+}
+
 final class LogoTile: NSView {
     let item: PickerItem
     var on: Bool = false { didSet { applyChrome() } }
@@ -283,6 +325,120 @@ final class DeviceCell: NSView {
     }
 }
 
+final class GroupHeader: NSView {
+    let title: String
+    let ids: [String]
+    var on: Bool = false { didSet { applyChrome() } }
+    var click: (() -> Void)?
+    let titleLab: NSTextField
+
+    init(title: String, ids: [String]) {
+        self.title = title
+        self.ids = ids
+        self.titleLab = lab(title.uppercased(), size: 9, weight: .semibold, color: Theme.accent)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 4
+        addSubview(titleLab)
+        toolTip = "Select all in \(title)"
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 16),
+            titleLab.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            titleLab.centerYAnchor.constraint(equalTo: centerYAnchor),
+            titleLab.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
+        ])
+        applyChrome()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:)") }
+
+    func applyChrome() {
+        titleLab.textColor = on ? Theme.accent : Theme.mute
+        layer?.backgroundColor = (on ? Theme.accent.withAlphaComponent(0.14) : NSColor.clear).cgColor
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        click?()
+    }
+}
+
+final class FinderWell: NSView {
+    let nameLab: NSTextField
+    let countLab: NSTextField
+    let icon: NSImageView
+    var filePath: String = ""
+    var folderPath: String = ""
+    var onOpen: ((String) -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        nameLab = lab("Untitled", size: 10, weight: .medium, color: Theme.text)
+        nameLab.alignment = .center
+        nameLab.lineBreakMode = .byTruncatingMiddle
+        countLab = lab("0 items", size: 9, weight: .regular, color: Theme.mute)
+        countLab.alignment = .center
+        icon = NSImageView()
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.imageAlignment = .alignCenter
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        addSubview(icon)
+        addSubview(nameLab)
+        addSubview(countLab)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 88),
+            icon.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            icon.centerXAnchor.constraint(equalTo: centerXAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 48),
+            icon.heightAnchor.constraint(equalToConstant: 48),
+            nameLab.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 2),
+            nameLab.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            nameLab.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            countLab.topAnchor.constraint(equalTo: nameLab.bottomAnchor, constant: 0),
+            countLab.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            countLab.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            countLab.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:)") }
+
+    func applyEmpty(name: String, kind: String, folder: String) {
+        filePath = ""
+        folderPath = folder
+        nameLab.stringValue = name
+        countLab.stringValue = "0 items"
+        countLab.textColor = Theme.mute
+        icon.image = genericIcon(kind: kind)
+        icon.contentTintColor = nil
+    }
+
+    func applyFile(path: String, kind: String, folder: String) {
+        filePath = path
+        folderPath = folder
+        nameLab.stringValue = (path as NSString).lastPathComponent
+        countLab.stringValue = "1 item"
+        countLab.textColor = Theme.dim
+        if kind == "image", let img = NSImage(contentsOfFile: path) {
+            icon.image = img
+        } else if FileManager.default.fileExists(atPath: path) {
+            icon.image = NSWorkspace.shared.icon(forFile: path)
+        } else {
+            icon.image = genericIcon(kind: kind)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount >= 2 {
+            let target = filePath.isEmpty ? folderPath : filePath
+            onOpen?(target)
+        }
+    }
+}
+
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let ui = PreserveWindow()
@@ -367,6 +523,18 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     var flashBtn: NSButton!
     var footNote: NSTextField!
     var deviceHint: NSTextField!
+    var sessionBanner: NSTextField!
+    var groupHeaders: [GroupHeader] = []
+    var finderTabs: NSSegmentedControl!
+    var finderWells: [FinderWell] = []
+    var finderActiveID: String = "baby"
+    var hotpipeStatus: NSTextField!
+    var hotpipeMux: NSTextField!
+    var hotpipePorts: NSTextField!
+    var hotpipePath: NSTextField!
+    var hotpipeNote: NSTextField!
+    var seatApplied = false
+    var backupQueue: [String] = []
 
     var drivesView: NSTextView!
     var flagsView: NSTextView!
@@ -400,7 +568,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             defer: false
         )
         window.title = "FC-Preserve"
-        window.minSize = NSSize(width: 1280, height: 800)
+        window.minSize = NSSize(width: 900, height: 600)
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.appearance = NSAppearance(named: .darkAqua)
@@ -477,14 +645,15 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             strip.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
             strip.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
             strip.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
-            strip.heightAnchor.constraint(equalToConstant: 108),
+            strip.heightAnchor.constraint(equalToConstant: 128),
             header.topAnchor.constraint(equalTo: strip.bottomAnchor, constant: 10),
             header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24),
             sub.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 2),
             sub.leadingAnchor.constraint(equalTo: header.leadingAnchor),
             left.topAnchor.constraint(equalTo: sub.bottomAnchor, constant: 12),
             left.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
-            left.widthAnchor.constraint(equalToConstant: 420),
+            left.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
+            left.widthAnchor.constraint(lessThanOrEqualToConstant: 480),
             left.bottomAnchor.constraint(equalTo: primaryBtn.topAnchor, constant: -14),
             stepper.topAnchor.constraint(equalTo: sub.bottomAnchor, constant: 12),
             stepper.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: 12),
@@ -493,7 +662,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             card.topAnchor.constraint(equalTo: stepper.bottomAnchor, constant: 8),
             card.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: 12),
             card.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
-            card.heightAnchor.constraint(equalToConstant: 210),
+            card.heightAnchor.constraint(greaterThanOrEqualToConstant: 140),
             desk.topAnchor.constraint(equalTo: card.bottomAnchor, constant: 10),
             desk.leadingAnchor.constraint(equalTo: left.trailingAnchor, constant: 12),
             desk.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
@@ -514,6 +683,13 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             footNote.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
         ])
 
+        let leftPref = left.widthAnchor.constraint(equalTo: root.widthAnchor, multiplier: 0.30)
+        leftPref.priority = NSLayoutConstraint.Priority(750)
+        leftPref.isActive = true
+        let cardPref = card.heightAnchor.constraint(equalToConstant: 210)
+        cardPref.priority = NSLayoutConstraint.Priority(600)
+        cardPref.isActive = true
+        loadSeatSelection()
         applyStep()
         refreshLaneInventory()
         refreshHFModels()
@@ -525,12 +701,9 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     func show() {
-        let screen = NSScreen.screens.first ?? NSScreen.main
-        if let screen = screen {
-            let vis = screen.visibleFrame
-            let size = NSSize(width: min(1560, vis.width - 24), height: min(940, vis.height - 24))
-            let origin = NSPoint(x: vis.midX - size.width / 2, y: vis.midY - size.height / 2)
-            window.setFrame(NSRect(origin: origin, size: size), display: true)
+        if !seatApplied {
+            applySeatOrDefault()
+            seatApplied = true
         }
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.level = .floating
@@ -600,35 +773,64 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
         let tag = lab("SELECT DEVICE", size: 10, weight: .semibold, color: Theme.accent)
         wrap.addSubview(tag)
-        let how = lab("one row · click any/all · orange selected · gray idle · bar under every logo is that device", size: 10, weight: .regular, color: Theme.mute)
+        let how = lab("groups · header click = all in group · orange selected · bar under every logo · side-scroll when overflow", size: 10, weight: .regular, color: Theme.mute)
         wrap.addSubview(how)
 
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = false
         scroll.hasHorizontalScroller = true
-        scroll.autohidesScrollers = true
+        scroll.autohidesScrollers = false
+        scroll.horizontalScrollElasticity = .allowed
         scroll.borderType = .noBorder
         scroll.drawsBackground = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
         wrap.addSubview(scroll)
 
         let items = householdPicker()
-        deviceCells = items.map { DeviceCell(item: $0) }
-        logoTiles = deviceCells.map { $0.tile }
-        for cell in deviceCells {
-            cell.on = selectedIDs.contains(cell.item.id)
-            cell.click = { [weak self, id = cell.item.id] in
-                self?.toggleLogo(id)
+        let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        deviceCells = []
+        logoTiles = []
+        groupHeaders = []
+        var groupCols: [NSView] = []
+        for g in deviceGroups() {
+            let cells: [DeviceCell] = g.ids.compactMap { id in
+                guard let item = byID[id] else { return nil }
+                let cell = DeviceCell(item: item)
+                cell.on = selectedIDs.contains(item.id)
+                cell.click = { [weak self, id = item.id] in
+                    self?.toggleLogo(id)
+                }
+                deviceCells.append(cell)
+                logoTiles.append(cell.tile)
+                return cell
             }
+            if cells.isEmpty { continue }
+            let header = GroupHeader(title: g.title, ids: g.ids)
+            header.on = g.ids.allSatisfy { selectedIDs.contains($0) }
+            header.click = { [weak self, ids = g.ids] in
+                self?.selectGroup(ids)
+            }
+            groupHeaders.append(header)
+            let row = NSStackView(views: cells)
+            row.orientation = .horizontal
+            row.spacing = 4
+            row.alignment = .top
+            row.translatesAutoresizingMaskIntoConstraints = false
+            let col = NSStackView(views: [header, row])
+            col.orientation = .vertical
+            col.alignment = .leading
+            col.spacing = 3
+            col.translatesAutoresizingMaskIntoConstraints = false
+            groupCols.append(col)
         }
-        let row = NSStackView(views: deviceCells)
-        row.orientation = .horizontal
-        row.spacing = 4
-        row.alignment = .top
-        row.translatesAutoresizingMaskIntoConstraints = false
+        let groups = NSStackView(views: groupCols)
+        groups.orientation = .horizontal
+        groups.alignment = .top
+        groups.spacing = 12
+        groups.translatesAutoresizingMaskIntoConstraints = false
         let doc = NSView()
         doc.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(row)
+        doc.addSubview(groups)
         scroll.documentView = doc
         NSLayoutConstraint.activate([
             tag.topAnchor.constraint(equalTo: wrap.topAnchor, constant: 6),
@@ -640,9 +842,9 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             scroll.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 8),
             scroll.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -8),
             scroll.bottomAnchor.constraint(equalTo: wrap.bottomAnchor, constant: -6),
-            row.topAnchor.constraint(equalTo: doc.topAnchor),
-            row.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
-            row.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
+            groups.topAnchor.constraint(equalTo: doc.topAnchor),
+            groups.leadingAnchor.constraint(equalTo: doc.leadingAnchor),
+            groups.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
             doc.heightAnchor.constraint(equalTo: scroll.contentView.heightAnchor),
             doc.widthAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.widthAnchor),
         ])
@@ -655,65 +857,62 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         wrap.layer?.backgroundColor = Theme.card.cgColor
         wrap.layer?.cornerRadius = 12
 
-        let h = sectionTitle("THUMBNAILS + DATA", symbol: "photo.on.rectangle")
-        wrap.addSubview(h)
-        idBody = lab("GrokBotBaby · identity below. IMEI / Find My never shown.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
-        wrap.addSubview(idBody)
-        usbBadge = lab("USB: probing…", size: 12, weight: .semibold, color: Theme.warn, wrap: true)
-        wrap.addSubview(usbBadge)
-        usbDetail = mono("", size: 10.5, color: Theme.dim, wrap: true)
-        wrap.addSubview(usbDetail)
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        wrap.addSubview(scroll)
 
+        let doc = NSView()
+        doc.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = doc
+
+        let h = sectionTitle("THUMBNAILS + DATA", symbol: "photo.on.rectangle")
+        doc.addSubview(h)
+        sessionBanner = lab("SESSION · Baby", size: 11, weight: .semibold, color: Theme.accent, wrap: true)
+        doc.addSubview(sessionBanner)
+        idBody = lab("GrokBotBaby · identity below. IMEI / Find My never shown.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
+        doc.addSubview(idBody)
+        usbBadge = lab("USB: probing…", size: 12, weight: .semibold, color: Theme.warn, wrap: true)
+        doc.addSubview(usbBadge)
+        usbDetail = mono("", size: 10.5, color: Theme.dim, wrap: true)
+        doc.addSubview(usbDetail)
+
+        finderTabs = NSSegmentedControl(labels: ["Baby"], trackingMode: .selectOne, target: self, action: #selector(finderTabChanged))
+        finderTabs.translatesAutoresizingMaskIntoConstraints = false
+        finderTabs.segmentStyle = .rounded
+        finderTabs.selectedSegment = 0
+        doc.addSubview(finderTabs)
+
+        finderWells = []
+        var rowViews: [NSView] = []
         let grid = NSStackView()
         grid.orientation = .vertical
-        grid.spacing = 6
+        grid.spacing = 4
         grid.translatesAutoresizingMaskIntoConstraints = false
-        wrap.addSubview(grid)
-        thumbSlots = []
-        thumbCaps = []
-        var rowViews: [NSView] = []
+        doc.addSubview(grid)
         for i in 0..<6 {
-            let box = NSView()
-            box.wantsLayer = true
-            box.layer?.backgroundColor = Theme.inset.cgColor
-            box.layer?.cornerRadius = 6
-            box.layer?.borderWidth = 1
-            box.layer?.borderColor = Theme.stepOff.cgColor
-            box.translatesAutoresizingMaskIntoConstraints = false
-            let iv = NSImageView()
-            iv.translatesAutoresizingMaskIntoConstraints = false
-            iv.imageScaling = .scaleProportionallyUpOrDown
-            iv.imageAlignment = .alignCenter
-            let cap = lab("empty", size: 9, weight: .regular, color: Theme.mute)
-            cap.alignment = .center
-            box.addSubview(iv)
-            box.addSubview(cap)
-            NSLayoutConstraint.activate([
-                box.heightAnchor.constraint(equalToConstant: 78),
-                iv.topAnchor.constraint(equalTo: box.topAnchor, constant: 4),
-                iv.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 4),
-                iv.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -4),
-                iv.bottomAnchor.constraint(equalTo: cap.topAnchor, constant: -2),
-                cap.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 2),
-                cap.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -2),
-                cap.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -3),
-            ])
-            thumbSlots.append(iv)
-            thumbCaps.append(cap)
-            rowViews.append(box)
+            let well = FinderWell()
+            well.onOpen = { [weak self] path in
+                self?.openInFinder(path)
+            }
+            finderWells.append(well)
+            rowViews.append(well)
             if rowViews.count == 3 || i == 5 {
                 let r = NSStackView(views: rowViews)
                 r.orientation = .horizontal
                 r.distribution = .fillEqually
-                r.spacing = 6
+                r.spacing = 8
                 r.translatesAutoresizingMaskIntoConstraints = false
                 grid.addArrangedSubview(r)
                 rowViews = []
             }
         }
 
-        thumbNote = lab("no vault media · no AFC pull · mux empty — empty slots are honest, not placeholders of real photos.", size: 10.5, weight: .regular, color: Theme.warn, wrap: true)
-        wrap.addSubview(thumbNote)
+        thumbNote = lab("Finder icon-view · named slots · 0 items when empty · double-click opens Finder.", size: 10.5, weight: .regular, color: Theme.warn, wrap: true)
+        doc.addSubview(thumbNote)
 
         var cam: NSTextField!
         var sen: NSTextField!
@@ -737,41 +936,54 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         partsB.distribution = .fillEqually
         partsB.spacing = 6
         partsB.translatesAutoresizingMaskIntoConstraints = false
-        wrap.addSubview(partsA)
-        wrap.addSubview(partsB)
+        doc.addSubview(partsA)
+        doc.addSubview(partsB)
 
         deviceHint = lab("GrokBotBaby selected — vault-first backup. Flash stays locked until linux-gate.json ready.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
-        wrap.addSubview(deviceHint)
+        doc.addSubview(deviceHint)
 
         NSLayoutConstraint.activate([
-            h.topAnchor.constraint(equalTo: wrap.topAnchor, constant: 12),
-            h.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            h.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
-            idBody.topAnchor.constraint(equalTo: h.bottomAnchor, constant: 8),
-            idBody.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            idBody.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            scroll.topAnchor.constraint(equalTo: wrap.topAnchor, constant: 4),
+            scroll.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 4),
+            scroll.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -4),
+            scroll.bottomAnchor.constraint(equalTo: wrap.bottomAnchor, constant: -4),
+            doc.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            doc.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            doc.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            h.topAnchor.constraint(equalTo: doc.topAnchor, constant: 8),
+            h.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            h.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
+            sessionBanner.topAnchor.constraint(equalTo: h.bottomAnchor, constant: 8),
+            sessionBanner.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            sessionBanner.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
+            idBody.topAnchor.constraint(equalTo: sessionBanner.bottomAnchor, constant: 6),
+            idBody.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            idBody.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
             usbBadge.topAnchor.constraint(equalTo: idBody.bottomAnchor, constant: 8),
-            usbBadge.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            usbBadge.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            usbBadge.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            usbBadge.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
             usbDetail.topAnchor.constraint(equalTo: usbBadge.bottomAnchor, constant: 4),
-            usbDetail.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            usbDetail.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
-            grid.topAnchor.constraint(equalTo: usbDetail.bottomAnchor, constant: 10),
-            grid.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            grid.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            usbDetail.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            usbDetail.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
+            finderTabs.topAnchor.constraint(equalTo: usbDetail.bottomAnchor, constant: 8),
+            finderTabs.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            finderTabs.trailingAnchor.constraint(lessThanOrEqualTo: doc.trailingAnchor, constant: -8),
+            grid.topAnchor.constraint(equalTo: finderTabs.bottomAnchor, constant: 8),
+            grid.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            grid.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
             thumbNote.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 6),
-            thumbNote.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            thumbNote.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            thumbNote.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            thumbNote.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
             partsA.topAnchor.constraint(equalTo: thumbNote.bottomAnchor, constant: 10),
-            partsA.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            partsA.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            partsA.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            partsA.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
             partsB.topAnchor.constraint(equalTo: partsA.bottomAnchor, constant: 6),
-            partsB.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            partsB.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
+            partsB.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            partsB.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
             deviceHint.topAnchor.constraint(equalTo: partsB.bottomAnchor, constant: 10),
-            deviceHint.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: 12),
-            deviceHint.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -12),
-            deviceHint.bottomAnchor.constraint(lessThanOrEqualTo: wrap.bottomAnchor, constant: -12),
+            deviceHint.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 8),
+            deviceHint.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -8),
+            deviceHint.bottomAnchor.constraint(equalTo: doc.bottomAnchor, constant: -12),
         ])
         return wrap
     }
@@ -985,6 +1197,35 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         flagsScroll.heightAnchor.constraint(equalToConstant: 72).isActive = true
         doc.addSubview(flagsScroll)
 
+        let hHP = sectionTitle("HOTPIPE · MULTI-DEVICE BUS", symbol: "point.3.connected.trianglepath.dotted")
+        doc.addSubview(hHP)
+        hotpipePath = mono("~/.grok/pool/hotpipe/", size: 11, color: Theme.ok, wrap: true)
+        doc.addSubview(hotpipePath)
+        let hpCopy = button("Copy path", filled: false, action: #selector(copyHotpipe))
+        hpCopy.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(hpCopy)
+        hotpipeMux = lab("mux · en9 — probing", size: 11, weight: .medium, color: Theme.dim, wrap: true)
+        doc.addSubview(hotpipeMux)
+        hotpipePorts = mono(":8793  ·  :8798 — probing", size: 11, color: Theme.dim, wrap: true)
+        doc.addSubview(hotpipePorts)
+        hotpipeStatus = lab("hotpipe status — probing", size: 11, weight: .medium, color: Theme.dim, wrap: true)
+        doc.addSubview(hotpipeStatus)
+        let hpStat = button("Status", filled: false, action: #selector(hotpipeStatusAct))
+        let hpPush = button("Push", filled: false, action: #selector(hotpipePush))
+        let hpPull = button("Pull", filled: false, action: #selector(hotpipePull))
+        let hpRestart = button("Restart ingest", filled: true, action: #selector(hotpipeRestartIngest))
+        hpStat.translatesAutoresizingMaskIntoConstraints = false
+        hpPush.translatesAutoresizingMaskIntoConstraints = false
+        hpPull.translatesAutoresizingMaskIntoConstraints = false
+        hpRestart.translatesAutoresizingMaskIntoConstraints = false
+        let hpBtns = NSStackView(views: [hpStat, hpPush, hpPull, hpRestart])
+        hpBtns.orientation = .horizontal
+        hpBtns.spacing = 8
+        hpBtns.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(hpBtns)
+        hotpipeNote = lab("Bloch ingest only (:8793 / qbit-phone-track). Never starts Elffin. Never pkills MemoryGlass. Session push/pull writes fc-preserve-session.json.", size: 10.5, weight: .regular, color: Theme.mute, wrap: true)
+        doc.addSubview(hotpipeNote)
+
         let hISO = sectionTitle("ISO / USB TOOLS", symbol: "opticaldisc")
         doc.addSubview(hISO)
         let isoHow = lab("Etcher-shaped, local routes only. SELECT IMAGE → SELECT TARGET → FLASH + verify. Never the iPhone, never Internal APFS, never the Data vault, never qbitOS. Phone linux-gate still locks phone flash.", size: 11, weight: .regular, color: Theme.dim, wrap: true)
@@ -1139,7 +1380,29 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             flagsScroll.topAnchor.constraint(equalTo: drvScroll.bottomAnchor, constant: 6),
             flagsScroll.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
             flagsScroll.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
-            hISO.topAnchor.constraint(equalTo: flagsScroll.bottomAnchor, constant: 14),
+            hHP.topAnchor.constraint(equalTo: flagsScroll.bottomAnchor, constant: 14),
+            hHP.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hotpipePath.topAnchor.constraint(equalTo: hHP.bottomAnchor, constant: 4),
+            hotpipePath.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hotpipePath.trailingAnchor.constraint(equalTo: hpCopy.leadingAnchor, constant: -8),
+            hpCopy.centerYAnchor.constraint(equalTo: hotpipePath.centerYAnchor),
+            hpCopy.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hpCopy.widthAnchor.constraint(equalToConstant: 88),
+            hotpipeMux.topAnchor.constraint(equalTo: hotpipePath.bottomAnchor, constant: 4),
+            hotpipeMux.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hotpipeMux.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hotpipePorts.topAnchor.constraint(equalTo: hotpipeMux.bottomAnchor, constant: 2),
+            hotpipePorts.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hotpipePorts.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hotpipeStatus.topAnchor.constraint(equalTo: hotpipePorts.bottomAnchor, constant: 4),
+            hotpipeStatus.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hotpipeStatus.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hpBtns.topAnchor.constraint(equalTo: hotpipeStatus.bottomAnchor, constant: 6),
+            hpBtns.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hotpipeNote.topAnchor.constraint(equalTo: hpBtns.bottomAnchor, constant: 4),
+            hotpipeNote.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
+            hotpipeNote.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -pad),
+            hISO.topAnchor.constraint(equalTo: hotpipeNote.bottomAnchor, constant: 14),
             hISO.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
             isoHow.topAnchor.constraint(equalTo: hISO.bottomAnchor, constant: 4),
             isoHow.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: pad),
@@ -1269,6 +1532,39 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         } else {
             selectedIDs.insert(id)
         }
+        applySelection()
+    }
+
+    func selectGroup(_ ids: [String]) {
+        let allOn = ids.allSatisfy { selectedIDs.contains($0) }
+        if allOn {
+            for id in ids { selectedIDs.remove(id) }
+            if selectedIDs.isEmpty { selectedIDs.insert(ids[0]) }
+        } else {
+            for id in ids { selectedIDs.insert(id) }
+        }
+        applySelection()
+    }
+
+    func applySelection() {
+        syncAliasFromSession()
+        for tile in logoTiles {
+            tile.on = selectedIDs.contains(tile.item.id)
+        }
+        for h in groupHeaders {
+            h.on = h.ids.allSatisfy { selectedIDs.contains($0) }
+        }
+        refreshPickerHint()
+        refreshIdentity()
+        applyParts(phoneUsed: lastPhoneUsed, phoneFree: lastPhoneFree, phoneKnown: lastPhoneKnown)
+        rebuildStorageBars()
+        refreshThumbs()
+        refreshISOFlashState()
+        saveSeat()
+        writeSessionJSON()
+    }
+
+    func syncAliasFromSession() {
         if selectedIDs.contains("baby") {
             alias = "GrokBotBaby"
         } else if selectedIDs.contains("brick") {
@@ -1276,25 +1572,37 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         } else {
             alias = "GrokBotBaby"
         }
-        for tile in logoTiles {
-            tile.on = selectedIDs.contains(tile.item.id)
-        }
-        refreshPickerHint()
-        refreshIdentity()
-        applyParts(phoneUsed: lastPhoneUsed, phoneFree: lastPhoneFree, phoneKnown: lastPhoneKnown)
-        rebuildStorageBars()
-        refreshThumbs()
+    }
+
+    func sessionItems() -> [PickerItem] {
+        return householdPicker().filter { selectedIDs.contains($0.id) }
+    }
+
+    func sessionLine() -> String {
+        return sessionItems().map { $0.caption }.joined(separator: " · ")
+    }
+
+    func sessionPhoneAliases() -> [String] {
+        var a: [String] = []
+        if selectedIDs.contains("baby") { a.append("GrokBotBaby") }
+        if selectedIDs.contains("brick") { a.append("Brick") }
+        return a
     }
 
     func refreshPickerHint() {
         let names = householdPicker().filter { selectedIDs.contains($0.id) }.map { $0.caption }
         let joined = names.joined(separator: ", ")
-        if selectedIDs.contains("baby") {
-            deviceHint.stringValue = "Selected: \(joined). Vault-first backup is preserve.py all GrokBotBaby when mux is up. Flash stays locked."
+        if sessionBanner != nil {
+            sessionBanner.stringValue = "SESSION · " + joined
+        }
+        if selectedIDs.contains("baby") && selectedIDs.contains("brick") {
+            deviceHint.stringValue = "Session: \(joined). Backup runs GrokBotBaby then Brick. Brick never flash. Phone flash locked. Mini + vault stay in the set."
+        } else if selectedIDs.contains("baby") {
+            deviceHint.stringValue = "Session: \(joined). Vault-first backup is preserve.py all GrokBotBaby when mux is up. Flash stays locked."
         } else if selectedIDs.contains("brick") {
-            deviceHint.stringValue = "Selected: \(joined). Brick is preserve only, never flash. Vault-first phone path stays GrokBotBaby unless Brick is the only phone."
+            deviceHint.stringValue = "Session: \(joined). Brick is preserve only, never flash."
         } else {
-            deviceHint.stringValue = "Selected: \(joined). No phone in the set — backup still preserve.py all GrokBotBaby when mux is up. Not blocking on hotspot."
+            deviceHint.stringValue = "Session: \(joined). No phone in the set — backup will not start preserve.py until Baby and/or Brick is checked."
         }
     }
 
@@ -1412,63 +1720,142 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     func refreshThumbs() {
-        if thumbSlots.isEmpty { return }
-        let found = findMediaThumbs()
-        for (i, slot) in thumbSlots.enumerated() {
+        if finderWells.isEmpty { return }
+        rebuildFinderTabs()
+        let items = sessionItems()
+        let active = items.first(where: { $0.id == finderActiveID }) ?? items.first
+        let id = active?.id ?? "baby"
+        finderActiveID = id
+        let folder = folderForDevice(id)
+        let found = findMediaThumbs(for: id)
+        let slots = slotNames(for: id)
+        for (i, well) in finderWells.enumerated() {
             if i < found.count {
                 let (path, kind) = found[i]
-                if kind == "image", let img = NSImage(contentsOfFile: path) {
-                    slot.image = img
-                    slot.contentTintColor = nil
-                    thumbCaps[i].stringValue = (path as NSString).lastPathComponent
-                    thumbCaps[i].textColor = Theme.dim
-                    slot.superview?.layer?.borderColor = Theme.accent.withAlphaComponent(0.45).cgColor
-                } else {
-                    slot.image = nil
-                    if #available(macOS 11.0, *) {
-                        let cfg = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-                        slot.image = NSImage(systemSymbolName: kind == "video" ? "film" : "photo", accessibilityDescription: kind)?.withSymbolConfiguration(cfg)
-                    }
-                    slot.contentTintColor = Theme.mute
-                    thumbCaps[i].stringValue = (path as NSString).lastPathComponent
-                    thumbCaps[i].textColor = Theme.dim
-                    slot.superview?.layer?.borderColor = Theme.stepOff.cgColor
-                }
+                well.applyFile(path: path, kind: kind, folder: folder)
             } else {
-                slot.image = nil
-                if #available(macOS 11.0, *) {
-                    let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-                    slot.image = NSImage(systemSymbolName: "photo", accessibilityDescription: "empty")?.withSymbolConfiguration(cfg)
-                }
-                slot.contentTintColor = Theme.stepOff
-                thumbCaps[i].stringValue = "empty"
-                thumbCaps[i].textColor = Theme.mute
-                slot.superview?.layer?.borderColor = Theme.stepOff.cgColor
+                let name = i < slots.count ? slots[i] : "Untitled"
+                let kind = (name == "Photos" || name == "Live") ? "image" : "folder"
+                well.applyEmpty(name: name, kind: kind, folder: folder)
+            }
+            well.onOpen = { [weak self] path in
+                self?.openInFinder(path)
             }
         }
         if found.isEmpty {
-            var line = "no vault media · no AFC pull"
+            var line = "Finder · \(active?.caption ?? id) · 0 items"
             if lastMuxEmpty { line += " · mux empty" }
-            if lastHotspot { line += " · Personal Hotspot has the cable — turn hotspot off, unlock, Trust" }
-            line += " — empty slots are honest, not fake photos."
+            if lastHotspot { line += " · hotspot has the cable" }
+            line += " — empty wells are honest, not fake photos. Double-click opens Finder."
             thumbNote.stringValue = line
             thumbNote.textColor = Theme.warn
         } else {
-            thumbNote.stringValue = "\(found.count) file(s) on disk (vault extract / AFC / live.jpg). Not inventing frames."
+            thumbNote.stringValue = "\(found.count) file(s) on disk for \(active?.caption ?? id) (vault extract / AFC / live.jpg). Double-click opens Finder."
             thumbNote.textColor = Theme.ok
         }
     }
 
-    func findMediaThumbs() -> [(String, String)] {
+    func rebuildFinderTabs() {
+        if finderTabs == nil { return }
+        let items = sessionItems()
+        let names = items.map { $0.caption }
+        let labels = names.isEmpty ? ["Session"] : names
+        let prev = finderActiveID
+        finderTabs.segmentCount = labels.count
+        for (i, name) in labels.enumerated() {
+            finderTabs.setLabel(name, forSegment: i)
+            finderTabs.setWidth(0, forSegment: i)
+        }
+        if let idx = items.firstIndex(where: { $0.id == prev }) {
+            finderTabs.selectedSegment = idx
+            finderActiveID = items[idx].id
+        } else {
+            finderTabs.selectedSegment = 0
+            finderActiveID = items.first?.id ?? "baby"
+        }
+    }
+
+    @objc func finderTabChanged() {
+        let items = sessionItems()
+        let i = finderTabs.selectedSegment
+        if i >= 0 && i < items.count {
+            finderActiveID = items[i].id
+        }
+        refreshThumbs()
+    }
+
+    func slotNames(for id: String) -> [String] {
+        switch id {
+        case "baby", "brick", "usbphone":
+            return ["Photos", "Videos", "Extract", "Motion", "Live", "Backup"]
+        case "vault":
+            return ["images", "extract", "catalog", "hashes", "motion", "other"]
+        case "mini", "mbp2019":
+            return ["Photos", "Documents", "Movies", "Vault", "Logs", "Other"]
+        case "iso", "osimg":
+            return ["ISO", "IMG", "DMG", "catalog", "notes", "other"]
+        case "models":
+            return ["HF cache", "LM Studio", "GGUF", "mlx", "other", "reserved"]
+        default:
+            return ["Photos", "Videos", "Extract", "Motion", "Live", "Other"]
+        }
+    }
+
+    func folderForDevice(_ id: String) -> String {
+        switch id {
+        case "baby": return kDefaultVault + "/GrokBotBaby"
+        case "brick": return kDefaultVault + "/Brick"
+        case "vault": return kDefaultVault
+        case "iso", "osimg": return kImagesDir
+        case "models":
+            let hf = (NSHomeDirectory() as NSString).appendingPathComponent(".cache/huggingface")
+            return FileManager.default.fileExists(atPath: hf) ? hf : kDefaultVault
+        default:
+            return kDefaultVault
+        }
+    }
+
+    func openInFinder(_ path: String) {
+        if path.isEmpty { return }
+        let url = URL(fileURLWithPath: path)
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: path, isDirectory: &isDir) {
+            if isDir.boolValue {
+                NSWorkspace.shared.open(url)
+            } else {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+            return
+        }
+        let parent = (path as NSString).deletingLastPathComponent
+        if FileManager.default.fileExists(atPath: parent) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: parent))
+            return
+        }
+        if FileManager.default.fileExists(atPath: kDefaultVault) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: kDefaultVault))
+        }
+    }
+
+    func findMediaThumbs(for id: String? = nil) -> [(String, String)] {
         var out: [(String, String)] = []
         let fm = FileManager.default
         let imgExt = Set(["jpg", "jpeg", "png", "gif", "heic", "heif", "webp", "tif", "tiff", "bmp"])
         let vidExt = Set(["mov", "mp4", "m4v", "avi"])
-        var roots: [String] = [
-            kDefaultVault + "/GrokBotBaby",
-            kDefaultVault + "/Brick",
-            "/tmp/live.jpg",
-        ]
+        var roots: [String] = []
+        let focus = id ?? finderActiveID
+        switch focus {
+        case "baby":
+            roots.append(kDefaultVault + "/GrokBotBaby")
+        case "brick":
+            roots.append(kDefaultVault + "/Brick")
+        case "vault":
+            roots.append(kDefaultVault)
+            roots.append(kImagesDir)
+        default:
+            roots.append(folderForDevice(focus))
+        }
+        roots.append("/tmp/live.jpg")
         if let vols = try? fm.contentsOfDirectory(atPath: "/Volumes") {
             for n in vols {
                 let low = n.lowercased()
@@ -1509,7 +1896,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         if idBody == nil { return }
         let names = householdPicker().filter { selectedIDs.contains($0.id) }.map { $0.caption }
         let joined = names.joined(separator: ", ")
-        var lines = "Selected: \(joined)"
+        var lines = "SESSION: \(joined)"
         if selectedIDs.contains("baby") {
             lines += "\nGrokBotBaby · iPhone 7 Plus · iPhone9,4 D111AP A10 · iOS 15.1"
             lines += "\nUDID \(kBabyUDID)"
@@ -1885,8 +2272,13 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         let ready = imgOK && isoTargetOK
         if isoFlashBtn != nil { isoFlashBtn.isEnabled = ready }
         if isoStatus == nil { return }
+        if selectedIDs.contains("brick") || selectedIDs.contains("baby") {
+            if isoFlashBtn != nil { isoFlashBtn.isEnabled = ready }
+            // phone/Brick stay non-dest; session note only
+        }
         if ready {
-            isoStatus.stringValue = "FLASH ready — image and removable dest accepted. Phone flash still locked."
+            let extra = (selectedIDs.contains("brick") || selectedIDs.contains("baby")) ? " Session includes a phone — Brick never flash, phone flash locked." : ""
+            isoStatus.stringValue = "FLASH ready — image and removable dest accepted. Phone flash still locked." + extra
             isoStatus.textColor = Theme.ok
         } else if !imgOK && isoTargetNode.isEmpty {
             isoStatus.stringValue = "FLASH locked — pick an image and a removable dest. Etcher route available. Phone linux-gate still locks phone flash."
@@ -1991,7 +2383,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             if validateDest(show: true) {
                 step = .backup
                 applyStep()
-                appendLog("Target: \(destField.stringValue)\nDevice: \(alias)\n")
+                appendLog("Target: \(destField.stringValue)\nSession: \(sessionLine())\nPrimary: \(alias)\n")
             }
             return
         }
@@ -2283,6 +2675,7 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         rebuildStorageBars()
         refreshIdentity()
         refreshThumbs()
+        refreshHotpipe(s)
         if isoList != nil { applyISOLists() }
         rebuildRoutes(s)
         applyMotion(s)
@@ -2290,6 +2683,13 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
 
     func applyParts(phoneUsed: Int64, phoneFree: Int64, phoneKnown: Bool) {
+        if selectedIDs.contains("baby") && selectedIDs.contains("brick") {
+            partCamera.stringValue = "Session: GrokBotBaby dual 12MP + Brick Continuity. Live frame: none."
+            partSensors.stringValue = "Baby sensors listed · Brick not inventoried until mux."
+            partStorage.stringValue = phoneKnown ? "Baby used \(fmtBytes(phoneUsed)) / free \(fmtBytes(phoneFree))" : "0 / unknown — mux empty"
+            partIDs.stringValue = "SESSION " + self.sessionLine() + "\nUDID " + kBabyUDID + "\nSerial " + kBabySerial + "\nBrick UDID unknown until mux.\nIMEI / Find My never shown."
+            return
+        }
         if alias == "Brick" {
             partCamera.stringValue = "Continuity Camera body. Live frame: none. Preserve only."
             partSensors.stringValue = "Daily iPhone sensors — not inventoried until mux."
@@ -2501,14 +2901,36 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     func startBackup() {
         if running { return }
         if !validateDest(show: true) { return }
-        if alias != "GrokBotBaby" && alias != "Brick" { return }
+        let phones = sessionPhoneAliases()
+        if phones.isEmpty {
+            appendLog("session \(sessionLine()) has no phone — not starting preserve.py. Check Baby and/or Brick.\n")
+            return
+        }
         stopWaiterIfNeeded()
+        let dest = (destField.stringValue as NSString).expandingTildeInPath
+        backupQueue = phones
         running = true
         applyStep()
-        let dest = (destField.stringValue as NSString).expandingTildeInPath
-        appendLog("\n—— \(isoNow())  python3 \(kPreservePy) all \(alias)\n")
+        appendLog("\n—— \(isoNow())  session \(sessionLine())\n")
         appendLog("FC_PRESERVE_ROOT=\(dest)\n")
+        appendLog("phones: \(phones.joined(separator: ", "))\n")
+        appendLog("Brick never flash. Phone flash locked.\n")
         appendLog("waiter stopped if it was looping (app owns this run)\n\n")
+        runNextBackup(dest: dest)
+    }
+
+    func runNextBackup(dest: String) {
+        guard let next = backupQueue.first else {
+            running = false
+            proc = nil
+            flashBtn.isEnabled = false
+            flashBtn.title = "flash locked (gate not ready)"
+            applyStep()
+            return
+        }
+        backupQueue.removeFirst()
+        alias = next
+        appendLog("—— python3 \(kPreservePy) all \(alias)\n")
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         task.arguments = [kPreservePy, "all", alias]
@@ -2529,12 +2951,16 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         task.terminationHandler = { [weak self] t in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.appendLog("\n—— exit \(t.terminationStatus)\n")
-                self.running = false
-                self.proc = nil
-                self.flashBtn.isEnabled = false
-                self.flashBtn.title = "flash locked (gate not ready)"
-                self.applyStep()
+                self.appendLog("\n—— \(self.alias) exit \(t.terminationStatus)\n")
+                if !self.backupQueue.isEmpty {
+                    self.runNextBackup(dest: dest)
+                } else {
+                    self.running = false
+                    self.proc = nil
+                    self.flashBtn.isEnabled = false
+                    self.flashBtn.title = "flash locked (gate not ready)"
+                    self.applyStep()
+                }
             }
         }
         do {
@@ -2542,8 +2968,12 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             proc = task
         } catch {
             appendLog("failed to start preserve.py: \(error)\n")
-            running = false
-            applyStep()
+            if !backupQueue.isEmpty {
+                runNextBackup(dest: dest)
+            } else {
+                running = false
+                applyStep()
+            }
         }
     }
 
@@ -2736,9 +3166,154 @@ final class PreserveWindow: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        saveSeat()
+        writeSessionJSON()
         timer?.invalidate()
         if let proc = proc, proc.isRunning { proc.terminate() }
     }
+
+    func windowDidEndLiveResize(_ notification: Notification) { saveSeat() }
+    func windowDidMove(_ notification: Notification) { saveSeat() }
+
+    func applySeatOrDefault() {
+        if restoreSeat() { return }
+        let screen = NSScreen.screens.first ?? NSScreen.main
+        if let screen = screen {
+            let vis = screen.visibleFrame
+            let size = NSSize(width: min(1560, vis.width - 24), height: min(940, vis.height - 24))
+            let origin = NSPoint(x: vis.midX - size.width / 2, y: vis.midY - size.height / 2)
+            window.setFrame(NSRect(origin: origin, size: size), display: true)
+        }
+    }
+
+    func loadSeatSelection() {
+        guard let obj = Self.jsonFile(kSeatJSON) else { return }
+        if let ids = obj["selected"] as? [String], !ids.isEmpty {
+            let known = Set(householdPicker().map { $0.id })
+            let keep = Set(ids.filter { known.contains($0) })
+            if !keep.isEmpty { selectedIDs = keep }
+        }
+        syncAliasFromSession()
+        for cell in deviceCells {
+            cell.on = selectedIDs.contains(cell.item.id)
+        }
+        for h in groupHeaders {
+            h.on = h.ids.allSatisfy { selectedIDs.contains($0) }
+        }
+    }
+
+    @discardableResult
+    func restoreSeat() -> Bool {
+        guard let obj = Self.jsonFile(kSeatJSON) else { return false }
+        func num(_ k: String) -> Double? {
+            if let d = obj[k] as? Double { return d }
+            if let i = obj[k] as? Int { return Double(i) }
+            if let n = obj[k] as? NSNumber { return n.doubleValue }
+            return nil
+        }
+        guard let x = num("x"), let y = num("y"), let w = num("w"), let h = num("h"), w >= 800, h >= 500 else { return false }
+        var frame = NSRect(x: x, y: y, width: w, height: h)
+        if let vis = (NSScreen.screens.first ?? NSScreen.main)?.visibleFrame {
+            if !vis.intersects(frame) {
+                frame.origin = NSPoint(x: vis.midX - w / 2, y: vis.midY - h / 2)
+            }
+            frame.size.width = min(max(900, frame.size.width), vis.width)
+            frame.size.height = min(max(600, frame.size.height), vis.height)
+        }
+        window.setFrame(frame, display: true)
+        return true
+    }
+
+    func saveSeat() {
+        guard window != nil else { return }
+        let f = window.frame
+        let doc: [String: Any] = [
+            "schema": "fc-preserve-seat-v1",
+            "x": f.origin.x,
+            "y": f.origin.y,
+            "w": f.size.width,
+            "h": f.size.height,
+            "selected": Array(selectedIDs).sorted(),
+        ]
+        writeJSON(kSeatJSON, doc)
+    }
+
+    func writeSessionJSON() {
+        let dest = (destField?.stringValue ?? kDefaultVault)
+        let doc: [String: Any] = [
+            "schema": "fc-preserve-session-v1",
+            "ts": isoNow(),
+            "selected": Array(selectedIDs).sorted(),
+            "names": sessionLine(),
+            "phones": sessionPhoneAliases(),
+            "dest": dest,
+            "isoImage": isoImagePath,
+            "isoTarget": isoTargetNode,
+            "alias": alias,
+            "hotpipe": kHotpipe,
+            "bloch": kBlochURL,
+            "bridge": kBridgeURL,
+            "note": "multi-device bus session — Brick never flash, phone flash locked",
+        ]
+        writeJSON(kSessionJSON, doc)
+    }
+
+    func writeJSON(_ path: String, _ doc: [String: Any]) {
+        let dir = (path as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        if let data = try? JSONSerialization.data(withJSONObject: doc, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+    }
+
+    func refreshHotpipe(_ s: Snap) {
+        if hotpipeMux == nil { return }
+        let mux = s.mux.isEmpty ? "mux empty" : "mux " + s.mux.joined(separator: " ")
+        let en9 = s.en9Up ? "en9 hotspot/NCM up" : "en9 down"
+        hotpipeMux.stringValue = "\(mux)  ·  \(en9)  ·  USB iPhone \(s.usbPhone ? "present" : "absent")"
+        hotpipeMux.textColor = (!s.mux.isEmpty) ? Theme.ok : (s.en9Up ? Theme.warn : Theme.dim)
+        let b3 = (s.blochCode != "000" && !s.blochCode.isEmpty) ? ":8793 up (\(s.blochCode))" : ":8793 down"
+        let b8 = (s.bridgeCode != "000" && !s.bridgeCode.isEmpty) ? ":8798 up (\(s.bridgeCode))" : ":8798 down"
+        hotpipePorts.stringValue = "\(b3)  ·  \(b8)  ·  Bloch ingest only"
+        hotpipePorts.textColor = (s.blochCode != "000" && !s.blochCode.isEmpty) ? Theme.ok : Theme.warn
+        hotpipePath.stringValue = kHotpipe
+        let session = sessionLine()
+        hotpipeStatus.stringValue = "session \(session)  ·  bus \(kHotpipe)  ·  push/pull via qbit-phone-track"
+        hotpipeStatus.textColor = Theme.dim
+        writeSessionJSON()
+    }
+
+    @objc func copyHotpipe() {
+        copyString(kHotpipe)
+        if hotpipeNote != nil {
+            hotpipeNote.stringValue = "copied \(kHotpipe)  ·  also :8793 \(kBlochURL)  ·  :8798 \(kBridgeURL)"
+        }
+    }
+
+    func runPhoneTrack(_ op: String) {
+        if hotpipeNote != nil {
+            hotpipeNote.stringValue = "qbit-phone-track \(op) — Bloch ingest only, never Elffin, never MemoryGlass…"
+            hotpipeNote.textColor = Theme.warn
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let out = PreserveWindow.run("/usr/bin/python3", [kPhoneTrack, op])
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let clipped = String(out.prefix(400)).trimmingCharacters(in: .whitespacesAndNewlines)
+                self.hotpipeNote.stringValue = clipped.isEmpty ? "qbit-phone-track \(op) done" : clipped
+                self.hotpipeNote.textColor = Theme.ok
+                self.refreshAll()
+            }
+        }
+    }
+
+    @objc func hotpipeStatusAct() { runPhoneTrack("status") }
+    @objc func hotpipePush() {
+        writeSessionJSON()
+        runPhoneTrack("push")
+    }
+    @objc func hotpipePull() { runPhoneTrack("pull") }
+    @objc func hotpipeRestartIngest() { runPhoneTrack("restart") }
 }
 
 func logApp(_ s: String) {

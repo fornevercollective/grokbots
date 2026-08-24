@@ -4,6 +4,18 @@ Native **AppKit** desk + 3-step (not Electron, not SwiftUI, not balenaEtcher).
 
 Dark chrome stays: **SELECT DEVICE → SELECT TARGET → BACKUP + verify**.
 
+
+Window is user-resizable (min ~900×600). Frame persists to `~/.grok/pool/hotpipe/fc-preserve-seat.json`.
+
+Top **SELECT DEVICE** row is a horizontal `NSScrollView`. Each icon+storage bar is one cell. Devices are grouped **Phones | Computers | Storage | Radios | Hubs | IoT/Cameras | Images/Models**. Click a group header to select all in that group.
+
+Left **THUMBNAILS + DATA** is a Finder icon-view: named slots, generic icons, `0 items` empty wells (not gray boxes). Real thumbs if the vault/AFC has images. Double-click opens Finder. Multi-selected devices are tabbed Finder panes.
+
+**HOTPIPE** pane (`~/.grok/pool/hotpipe/`) is the multi-device bus: status, push, pull, restart-ingest (Bloch ingest / `qbit-phone-track` only — does not start Elffin, does not pkill MemoryGlass). Shows mux, en9 hotspot, `:8793`, `:8798`. Paths are copyable.
+
+The selected set is a **session**. Backup / target / ISO / motion / hotpipe apply to the checked set. GrokBotBaby + Brick + Mini + vault can be selected together. Brick never flash. Phone flash locked.
+
+
 Left **SELECT DEVICE** is a multi-select logo grid (phones, Mini, 2019 MBP, storage, cameras, IoT, radios/hubs, ISO, OS images, models). Orange selected, gray idle.
 
 The right **desk** pane is live inventory + tether:
