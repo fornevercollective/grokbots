@@ -11,7 +11,7 @@ This is not grok-build. Tools live here so the Mini plugin nest stays the live C
 | Layer | Portable? | Role |
 |-------|-----------|------|
 | **Rust core** `crates/fc-preserve-core` | yes (macOS + Linux) | **walk** a device/vault/host tree; **sit** and write `~/.grok/pool/hotpipe/fc-preserve-tree.json` |
-| **Rust CLI** `crates/fc-preserve` (`fc-preserve`) | yes | `walk` / `sit` / `tree` / `devices` |
+| **Rust CLI** `crates/fc-preserve` (`fc-preserve`) | yes | `walk` / `sit` / `tree` / `devices` / `backup` / `all` / `ready` |
 | **Swift AppKit** `dist/FC-Preserve.app` | Mini only | optional paint of the same groups. Keep it running; do not delete it. |
 | **visionOS menu** | future | ornament that **reads the tree JSON** (or HTTP later). No visionOS binary in this repo — Mini has CLT only, no xros SDK. |
 
@@ -23,6 +23,9 @@ cargo build --release
 ./target/release/fc-preserve sit      # foreground sitter, writes the JSON
 ./target/release/fc-preserve tree     # print last snapshot
 ./target/release/fc-preserve devices
+./target/release/fc-preserve backup   # python3 <repo>/fc-preserve/preserve.py backup GrokBotBaby
+./target/release/fc-preserve all      # backup → extract → catalog → hash → gate
+./target/release/fc-preserve ready    # honest mux/pair/en9; ready:true only if UDID
 # copy also lands at dist/fc-preserve  (AppKit app stays at dist/FC-Preserve.app)
 ```
 
